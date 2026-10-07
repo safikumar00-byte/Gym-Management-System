@@ -1,0 +1,6 @@
+{
+  "name": "GYM MANAGER",
+  "description": "Commercial SaaS platform for gym owners to manage members, memberships, payments, renewals, receipts, expenses, revenue, and reports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

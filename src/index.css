@@ -1,0 +1,120 @@
+@import "tailwindcss";
+@import "./styles/materials.css";
+
+:root {
+  /* Apple Design System Color Tokens */
+  --color-primary: #0066cc;
+  --color-primary-focus: #0071e3;
+  --color-primary-dark: #2997ff;
+
+  --color-ink: #1d1d1f;
+  --color-body: #1d1d1f;
+  --color-muted: #7a7a7a;
+  --color-secondary: #86868b;
+
+  --color-white: #ffffff;
+  --color-parchment: #f5f5f7;
+  --color-pearl: #fafafc;
+
+  --color-dark-1: #272729;
+  --color-dark-2: #2a2a2c;
+  --color-dark-3: #252527;
+  --color-black: #000000;
+
+  --color-divider: #f0f0f0;
+  --color-hairline: #e0e0e0;
+  --color-hairline-dark: #333336;
+
+  --color-semantic-red: #ff3b30;
+  --color-semantic-green: #34c759;
+  --color-semantic-amber: #ff9500;
+
+  /* Standard Application Semantic Tokens (Default Light-Dominant) */
+  --background: #f5f5f7;
+  --foreground: #1d1d1f;
+
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+
+  --primary: #0066cc;
+  --primary-glow: #0071e3;
+  --primary-foreground: #ffffff;
+
+  --secondary: #f5f5f7;
+  --secondary-foreground: #1d1d1f;
+
+  --muted: #fafafc;
+  --muted-foreground: #7a7a7a;
+
+  --accent: #f0f0f0;
+  --accent-foreground: #1d1d1f;
+
+  --destructive: #ff3b30;
+  --destructive-foreground: #ffffff;
+
+  --border: #e0e0e0;
+  --input: #ffffff;
+  --ring: #0071e3;
+
+  --sidebar: #000000;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #0066cc;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #272729;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #272729;
+  --sidebar-ring: #0071e3;
+}
+
+* {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", -apple-system-body, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  overflow-x: hidden;
+  letter-spacing: -0.01em;
+}
+
+/* Subtle Apple-style scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.28);
+}
+
+/* Print styles for receipts */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-receipt, #printable-receipt * {
+    visibility: visible;
+  }
+  #printable-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 32px;
+    background: white !important;
+    color: #1d1d1f !important;
+  }
+}
+
