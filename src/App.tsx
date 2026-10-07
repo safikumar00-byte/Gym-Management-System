@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ToastProvider } from './components/ui/Toast';
 import { AuthProvider } from './context/AuthContext.tsx';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { AppShell, NavView } from './components/layout/AppShell';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { MembersView } from './components/members/MembersView';
@@ -30,7 +31,7 @@ import { Member, Payment, Gym } from './types';
 import { getGym, subscribeToStore } from './lib/storage';
 
 function AppContent() {
-  const { isLoggedIn, authScreen, isMember } = useAuth();
+  const { isLoggedIn, authScreen, isMember, loading } = useAuth();
   const [currentView, setCurrentView] = useState<NavView>('dashboard');
   const [gym, setGym] = useState<Gym>(getGym());
   const [renderTrigger, setRenderTrigger] = useState(0);
@@ -77,6 +78,17 @@ function AppContent() {
   const handleOpenReceipt = useCallback((payment: Payment) => {
     setReceiptTargetPayment(payment);
   }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#fafafc] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-9 h-9 border-3 border-[#0071e3] border-t-transparent rounded-full animate-spin" />
+          <div className="text-[13px] text-[#86868b] font-medium">Loading Gym Manager...</div>
+        </div>
+      </div>
+    );
+  }
 
   if (!isLoggedIn) {
     if (authScreen === 'register') {
@@ -238,10 +250,12 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ToastProvider>
-        <AppContent />
-      </ToastProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

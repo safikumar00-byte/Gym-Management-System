@@ -43,7 +43,8 @@ export const ReloginView: React.FC = () => {
   } = useAuth();
 
   const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState<ReloginTab>('fast');
+  const rememberedAccount = lastLoggedOutAccount;
+  const [activeTab, setActiveTab] = useState<ReloginTab>(() => rememberedAccount ? 'fast' : 'email');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleDemoMemberLogin = async () => {
@@ -70,8 +71,6 @@ export const ReloginView: React.FC = () => {
   const [emailMode, setEmailMode] = useState<'password' | 'otp'>('password');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-
-  const rememberedAccount = lastLoggedOutAccount;
 
   const quickProfiles = import.meta.env.DEV ? [
     {
@@ -112,9 +111,11 @@ export const ReloginView: React.FC = () => {
       } else if (roleOverride) {
         await reloginFast(roleOverride);
         showToast(`Signed in as ${roleOverride.toUpperCase()}`);
-      } else {
+      } else if (rememberedAccount) {
         await reloginFast(rememberedAccount);
-        showToast(`Welcome back, ${rememberedAccount.name}!`);
+        showToast(`Welcome back, ${rememberedAccount.name || 'Operator'}!`);
+      } else {
+        showToast('No saved account found. Please sign in with email.', 'error');
       }
     } catch {
       showToast('Failed to resume session', 'error');
@@ -274,10 +275,10 @@ export const ReloginView: React.FC = () => {
           {/* Apple Segmented Method Tabs */}
           <div className="flex p-1 bg-[#f5f5f7] rounded-full border border-[#e0e0e0]">
             {[
-              { id: 'fast', label: 'Quick Access', icon: Zap },
-              { id: 'email', label: 'Email', icon: Mail },
-              { id: 'phone', label: 'Mobile', icon: Smartphone },
-              { id: 'google', label: 'Google', icon: Sparkles },
+              ...(rememberedAccount ? [{ id: 'fast' as ReloginTab, label: 'Quick Access', icon: Zap }] : []),
+              { id: 'email' as ReloginTab, label: 'Email', icon: Mail },
+              { id: 'phone' as ReloginTab, label: 'Mobile', icon: Smartphone },
+              { id: 'google' as ReloginTab, label: 'Google', icon: Sparkles },
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -285,7 +286,7 @@ export const ReloginView: React.FC = () => {
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => { setActiveTab(tab.id as ReloginTab); clearPendingSetup(); }}
+                  onClick={() => { setActiveTab(tab.id); clearPendingSetup(); }}
                   className={`flex-1 py-1.5 px-2 rounded-full text-[12px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                     isActive
                       ? 'bg-white text-[#1d1d1f] shadow-sm'
@@ -301,7 +302,7 @@ export const ReloginView: React.FC = () => {
 
           <AnimatePresence mode="wait">
             {/* TAB 1: ONE-TAP FAST RELOGIN */}
-            {activeTab === 'fast' && (
+            {activeTab === 'fast' && rememberedAccount && (
               <motion.div
                 key="tab-fast"
                 initial={{ opacity: 0, y: 4 }}
@@ -321,11 +322,11 @@ export const ReloginView: React.FC = () => {
 
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-full bg-[#f5f9ff] border border-[#0071e3]/30 flex items-center justify-center font-semibold text-[16px] text-[#0071e3] shrink-0">
-                      {rememberedAccount.name.charAt(0).toUpperCase()}
+                      {(rememberedAccount.name || 'U').charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0">
                       <div className="text-[14px] font-semibold text-[#1d1d1f] truncate">
-                        {rememberedAccount.name}
+                        {rememberedAccount.name || 'Operator'}
                       </div>
                       <div className="text-[12px] text-[#86868b] truncate">
                         {rememberedAccount.email}
@@ -344,7 +345,7 @@ export const ReloginView: React.FC = () => {
                     onClick={() => handleQuickRelogin()}
                     className="w-full justify-center gap-2 mt-1 text-[13px]"
                   >
-                    <span>Continue as {rememberedAccount.name}</span>
+                    <span>Continue as {rememberedAccount.name || 'Operator'}</span>
                     <ArrowRight size={14} />
                   </Button>
                 </div>
@@ -479,36 +480,6 @@ export const ReloginView: React.FC = () => {
                           className={`${inputClass} pr-9`}
                         />
                         <Lock size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#86868b]" />
-                      </div>
-
-                      {/* Demo credential helpers */}
-                      <div className="p-3 bg-[#fafafc] border border-[#e0e0e0] rounded-[10px] text-[11px] text-[#86868b] space-y-1 mt-2">
-                        <div className="font-medium text-[#1d1d1f] flex items-center gap-1">
-                          <Sparkles size={12} className="text-[#0066cc]" />
-                          <span>Demo Operator Credentials:</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-1.5 text-[11px] pt-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEmail('rajesh@ironcoregym.com');
-                              setPassword('admin123');
-                            }}
-                            className="p-1.5 bg-white border border-[#e0e0e0] rounded-[8px] text-left hover:border-[#0071e3] cursor-pointer"
-                          >
-                            <strong>Owner:</strong> rajesh@ • admin123
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEmail('amit@ironcoregym.com');
-                              setPassword('manager123');
-                            }}
-                            className="p-1.5 bg-white border border-[#e0e0e0] rounded-[8px] text-left hover:border-[#0071e3] cursor-pointer"
-                          >
-                            <strong>Manager:</strong> amit@ • manager123
-                          </button>
-                        </div>
                       </div>
                     </div>
                   )}
