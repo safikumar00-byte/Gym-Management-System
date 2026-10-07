@@ -2,11 +2,13 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { Pool, PoolConfig } from 'pg';
+import pg from 'pg';
+const { Pool } = pg;
+import type { Pool as PgPool, PoolConfig } from 'pg';
 import * as schema from './schema.ts';
 
 declare global {
-  var _postgresPool: Pool | undefined;
+  var _postgresPool: PgPool | undefined;
 }
 
 export interface DbConfigSummary {
@@ -103,7 +105,7 @@ export function getSslConfig(): boolean | { rejectUnauthorized: boolean; ca?: st
   return false;
 }
 
-export const createPool = (): Pool => {
+export const createPool = (): PgPool => {
   if (!global._postgresPool) {
     const summary = getDatabaseConfigSummary();
     const sslConfig = getSslConfig();

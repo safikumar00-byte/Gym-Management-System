@@ -1,5 +1,5 @@
-import { Router, Response, Request } from 'express';
-import { requireAuth, AuthRequest } from '../middleware/auth.ts';
+import { Router, type Response, type Request } from 'express';
+import { requireAuth, type AuthRequest } from '../middleware/auth.ts';
 import { db } from '../db/index.ts';
 import { gyms, userProfiles, gymCounters, membershipPlans, members } from '../db/schema.ts';
 import { eq, and } from 'drizzle-orm';

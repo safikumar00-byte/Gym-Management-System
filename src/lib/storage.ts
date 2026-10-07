@@ -50,19 +50,51 @@ if (typeof window !== 'undefined') {
   }
 }
 
+export const EMPTY_GYM: Gym = {
+  id: '',
+  name: 'My Fitness Gym',
+  phone: '',
+  email: '',
+  address: '',
+  receiptPrefix: 'GM-',
+  receiptFooter: 'Thank you for training with us!',
+  upiId: '',
+  defaultPaymentMethod: 'UPI',
+  currency: 'INR',
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+};
+
+export const EMPTY_USER: UserProfile = {
+  id: '',
+  gymId: '',
+  name: '',
+  email: '',
+  role: 'owner',
+  createdAt: new Date().toISOString(),
+};
+
 // In-memory runtime cache synchronized with Cloud PostgreSQL
-let cachedGym: Gym = { ...INITIAL_GYM };
-let cachedUser: UserProfile = { ...INITIAL_USER };
-let cachedPlans: MembershipPlan[] = [...INITIAL_PLANS];
-let cachedMembers: Member[] = [...INITIAL_MEMBERS];
-let cachedMemberships: Membership[] = [...INITIAL_MEMBERSHIPS];
-let cachedPayments: Payment[] = INITIAL_PAYMENTS.map(p => ({
-  ...p,
-  date: p.date || p.paymentDate || getTodayString(),
-  paymentDate: p.paymentDate || p.date || getTodayString(),
-}));
-let cachedExpenses: Expense[] = [...INITIAL_EXPENSES];
-let cachedNotifications: NotificationItem[] = [...INITIAL_NOTIFICATIONS];
+let cachedGym: Gym = { ...EMPTY_GYM };
+let cachedUser: UserProfile = { ...EMPTY_USER };
+let cachedPlans: MembershipPlan[] = [];
+let cachedMembers: Member[] = [];
+let cachedMemberships: Membership[] = [];
+let cachedPayments: Payment[] = [];
+let cachedExpenses: Expense[] = [];
+let cachedNotifications: NotificationItem[] = [];
+
+export function clearStorageCache(): void {
+  cachedGym = { ...EMPTY_GYM };
+  cachedUser = { ...EMPTY_USER };
+  cachedPlans = [];
+  cachedMembers = [];
+  cachedMemberships = [];
+  cachedPayments = [];
+  cachedExpenses = [];
+  cachedNotifications = [];
+  notifyListeners();
+}
 
 type StorageListener = () => void;
 const listeners = new Set<StorageListener>();
@@ -116,7 +148,7 @@ export async function syncWithCloud(): Promise<void> {
       };
     }
 
-    if (plansData && Array.isArray(plansData) && plansData.length > 0) {
+    if (Array.isArray(plansData)) {
       cachedPlans = plansData.map((p: any) => ({
         id: p.id,
         gymId: p.gymId,
@@ -132,11 +164,11 @@ export async function syncWithCloud(): Promise<void> {
       }));
     }
 
-    if (membersData && Array.isArray(membersData) && membersData.length > 0) {
+    if (Array.isArray(membersData)) {
       cachedMembers = membersData.map((m: any) => ({
         id: m.id,
         gymId: m.gymId,
-        memberId: m.memberId,
+        memberId: m.memberId || m.memberCode || 'GM-001',
         name: m.name,
         phone: m.phone || '',
         email: m.email || '',
@@ -172,12 +204,10 @@ export async function syncWithCloud(): Promise<void> {
           });
         }
       });
-      if (msList.length > 0) {
-        cachedMemberships = msList;
-      }
+      cachedMemberships = msList;
     }
 
-    if (paymentsData && Array.isArray(paymentsData) && paymentsData.length > 0) {
+    if (Array.isArray(paymentsData)) {
       cachedPayments = paymentsData.map((p: any) => {
         const payDateStr = p.date ? p.date.split('T')[0] : (p.paymentDate ? p.paymentDate.split('T')[0] : getTodayString());
         return {
@@ -199,7 +229,7 @@ export async function syncWithCloud(): Promise<void> {
       });
     }
 
-    if (expensesData && Array.isArray(expensesData) && expensesData.length > 0) {
+    if (Array.isArray(expensesData)) {
       cachedExpenses = expensesData.map((e: any) => ({
         id: e.id,
         gymId: e.gymId,
@@ -214,7 +244,7 @@ export async function syncWithCloud(): Promise<void> {
       }));
     }
 
-    if (notifsData && Array.isArray(notifsData) && notifsData.length > 0) {
+    if (Array.isArray(notifsData)) {
       cachedNotifications = notifsData.map((n: any) => {
         const isReadVal = n.isRead !== undefined ? n.isRead : !!n.read;
         return {

@@ -59,57 +59,49 @@ export const ReloginView: React.FC = () => {
   };
 
   // Phone form
-  const [phone, setPhone] = useState('+91 98765 43210');
+  const [phone, setPhone] = useState('');
   const [phoneOtp, setPhoneOtp] = useState('');
   const [phoneCodeHint, setPhoneCodeHint] = useState<string | null>(null);
 
   // Email form
-  const [email, setEmail] = useState('rajesh@ironcoregym.com');
+  const [email, setEmail] = useState('');
   const [emailCode, setEmailCode] = useState('');
   const [emailCodeHint, setEmailCodeHint] = useState<string | null>(null);
   const [emailMode, setEmailMode] = useState<'password' | 'otp'>('password');
-  const [password, setPassword] = useState('admin123');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const rememberedAccount = lastLoggedOutAccount || {
-    id: 'user-01',
-    gymId: 'gym-01',
-    name: 'Rajesh Sharma',
-    email: 'rajesh@ironcoregym.com',
-    phone: '+91 98765 43210',
-    role: 'owner' as const,
-    createdAt: '2026-01-01',
-  };
+  const rememberedAccount = lastLoggedOutAccount;
 
-  const quickProfiles = [
+  const quickProfiles = import.meta.env.DEV ? [
     {
-      name: 'Rajesh Sharma',
+      name: 'Owner Account',
       role: 'owner' as AppRole,
-      email: 'rajesh@ironcoregym.com',
+      email: 'owner@testgym.com',
       badge: 'Owner (Full Access)',
       icon: Crown,
       color: 'text-[#0066cc]',
       accentBg: 'bg-[#f5f9ff] border-[#0071e3]/30',
     },
     {
-      name: 'Amit Patel',
+      name: 'Manager Account',
       role: 'manager' as AppRole,
-      email: 'amit@ironcoregym.com',
+      email: 'manager@testgym.com',
       badge: 'Manager (Operations)',
       icon: Briefcase,
       color: 'text-[#ff9500]',
       accentBg: 'bg-[#fffaf0] border-[#ff9500]/30',
     },
     {
-      name: 'Vikram Singh',
+      name: 'Trainer Account',
       role: 'trainer' as AppRole,
-      email: 'vikram@ironcoregym.com',
+      email: 'trainer@testgym.com',
       badge: 'Trainer (Coach)',
       icon: UserCheck2,
       color: 'text-[#34c759]',
       accentBg: 'bg-[#f4fcf6] border-[#34c759]/30',
     },
-  ];
+  ] : [];
 
   const handleQuickRelogin = async (roleOverride?: AppRole, customProfile?: any) => {
     try {
@@ -155,7 +147,7 @@ export const ReloginView: React.FC = () => {
           const code = await startPhoneSetup({
             phoneNumber: phone,
             name: 'Gym Operator',
-            gymName: gym?.name || 'Iron Core Fitness',
+            gymName: gym?.name || 'My Fitness Gym',
             role: 'owner',
           });
           setPhoneCodeHint(code);
@@ -197,7 +189,7 @@ export const ReloginView: React.FC = () => {
             const code = await startEmailSetup({
               email,
               name: 'Gym Operator',
-              gymName: gym?.name || 'Iron Core Fitness',
+              gymName: gym?.name || 'My Fitness Gym',
               role: 'owner',
             });
             setEmailCodeHint(code);
@@ -225,7 +217,7 @@ export const ReloginView: React.FC = () => {
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-white border border-[#e0e0e0] rounded-full text-[#0066cc] text-[12px] font-medium shadow-sm">
             <Dumbbell size={14} />
-            <span>{gym?.name || 'Iron Core Fitness'}</span>
+            <span>{gym?.name || 'Gym Manager SaaS'}</span>
           </div>
 
           <h1 className="text-[28px] sm:text-[32px] font-semibold text-[#1d1d1f] tracking-tight">

@@ -15,6 +15,7 @@ import {
   updateUser as updateStoredUser,
   authenticateWithPassword,
   registerNewGym,
+  clearStorageCache,
   GymRegistrationPayload
 } from '../lib/storage';
 
@@ -110,8 +111,11 @@ const STORAGE_LAST_ACCOUNT_KEY = 'gym_manager_last_account_v1';
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
-    const u = getUser();
-    return u;
+    try {
+      const savedUser = localStorage.getItem('gym_manager_user');
+      if (savedUser) return JSON.parse(savedUser);
+    } catch (_) {}
+    return null;
   });
   const [gym, setGym] = useState<Gym | null>(null);
   const [linkedMember, setLinkedMember] = useState<any | null>(null);
@@ -122,13 +126,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
     try {
       const savedSession = localStorage.getItem(STORAGE_AUTH_SESSION_KEY);
-      if (savedSession === 'false') {
-        return false;
-      }
+      const savedToken = localStorage.getItem('gym_manager_auth_token');
+      return savedSession === 'true' || !!savedToken;
     } catch (e) {
-      console.warn('Failed to parse session state', e);
+      return false;
     }
-    return true;
   });
 
   const [lastLoggedOutAccount, setLastLoggedOutAccount] = useState<UserProfile | null>(() => {
@@ -140,7 +142,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (e) {
       console.warn('Failed to parse last account', e);
     }
-    return getUser();
+    return null;
   });
 
   // Verification status
@@ -154,10 +156,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.warn('Failed to parse saved verification:', e);
     }
     return {
-      isVerified: true, // Default active operator is pre-verified to avoid locking out existing installs
-      method: 'email',
-      identifier: 'kiran@rawpowergym.in',
-      verifiedAt: new Date().toISOString(),
+      isVerified: false,
+      method: null,
+      identifier: null,
+      verifiedAt: null,
     };
   });
 
@@ -228,6 +230,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       if (user) {
+        setIsLoggedIn(true);
+        try {
+          localStorage.setItem(STORAGE_AUTH_SESSION_KEY, 'true');
+        } catch (_) {}
         persistVerification({
           isVerified: true,
           method: 'google',
@@ -235,6 +241,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           verifiedAt: new Date().toISOString(),
         });
         await fetchProfileAndGym();
+      } else {
+        const sessionToken = typeof localStorage !== 'undefined' ? localStorage.getItem('gym_manager_auth_token') : null;
+        if (!sessionToken) {
+          setIsLoggedIn(false);
+          setUserProfile(null);
+          setGym(null);
+          setLinkedMember(null);
+          clearStorageCache();
+        }
       }
       setLoading(false);
     });
@@ -584,24 +599,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       try {
         localStorage.removeItem('gym_manager_auth_token');
+        localStorage.removeItem('gym_manager_user');
+        localStorage.setItem(STORAGE_AUTH_SESSION_KEY, 'false');
       } catch (e) {
         // ignore
       }
       setFirebaseUser(null);
       setIsLoggedIn(false);
-      if (userProfile) {
-        setLastLoggedOutAccount(userProfile);
-        try {
-          localStorage.setItem(STORAGE_LAST_ACCOUNT_KEY, JSON.stringify(userProfile));
-        } catch (e) {
-          // ignore
-        }
-      }
-      try {
-        localStorage.setItem(STORAGE_AUTH_SESSION_KEY, 'false');
-      } catch (e) {
-        // ignore
-      }
+      setUserProfile(null);
+      setGym(null);
+      setLinkedMember(null);
+      clearStorageCache();
     } catch (err: any) {
       console.error('Logout error:', err);
     }
