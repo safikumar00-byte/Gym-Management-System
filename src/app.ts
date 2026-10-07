@@ -48,13 +48,27 @@ export function createApp(): express.Express {
   app.use('/api/member', memberRouter);
   app.use('/api/community', communityRouter);
 
-  // 4. 404 handler for unknown /api routes
-  app.all('/api/*', (req, res) => {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'API endpoint not found' } });
+  // 3b. Root & /api baseline status
+  app.get(['/', '/api'], (req, res) => {
+    res.json({
+      status: 'ok',
+      service: 'gym-manager-saas',
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // 4. Catch-all 404 handler (ensures no request hangs)
+  app.use((req, res) => {
+    res.status(404).json({ 
+      error: { 
+        code: 'NOT_FOUND', 
+        message: `API endpoint '${req.method} ${req.url}' not found` 
+      } 
+    });
   });
 
   // 5. Centralized API error handler
-  app.use('/api', (err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.error('Unhandled API Error:', err);
     res.status(err.status || 500).json({
       error: {

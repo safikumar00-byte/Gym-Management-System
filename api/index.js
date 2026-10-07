@@ -4582,10 +4582,22 @@ function createApp() {
   app2.use("/api/audit", audit_default);
   app2.use("/api/member", member_default);
   app2.use("/api/community", community_default);
-  app2.all("/api/*", (req, res) => {
-    res.status(404).json({ error: { code: "NOT_FOUND", message: "API endpoint not found" } });
+  app2.get(["/", "/api"], (req, res) => {
+    res.json({
+      status: "ok",
+      service: "gym-manager-saas",
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    });
   });
-  app2.use("/api", (err, req, res, next) => {
+  app2.use((req, res) => {
+    res.status(404).json({
+      error: {
+        code: "NOT_FOUND",
+        message: `API endpoint '${req.method} ${req.url}' not found`
+      }
+    });
+  });
+  app2.use((err, req, res, next) => {
     console.error("Unhandled API Error:", err);
     res.status(err.status || 500).json({
       error: {
@@ -4601,6 +4613,10 @@ var app_default = app;
 
 // src/api-entry.ts
 function handler(req, res) {
+  const matched = req.headers["x-matched-path"] || req.headers["x-vercel-matched-path"] || req.headers["x-rewrite-url"];
+  if (matched && req.url === "/api" && matched !== "/api") {
+    req.url = matched;
+  }
   return app_default(req, res);
 }
 export {
