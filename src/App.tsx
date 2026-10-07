@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { ToastProvider } from './components/ui/Toast';
 import { AuthProvider } from './context/AuthContext.tsx';
 import { AppShell, NavView } from './components/layout/AppShell';
@@ -241,6 +242,7 @@ export default function App() {
     <AuthProvider>
       <ToastProvider>
         <AppContent />
+        <SpeedInsights />
       </ToastProvider>
     </AuthProvider>
   );
