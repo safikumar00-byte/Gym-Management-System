@@ -20,6 +20,7 @@ import { motion } from 'motion/react';
 import { Button } from '../ui/Button';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../ui/Toast';
+import { validatePassword, validateEmail } from '../../lib/validation.ts';
 
 const FACILITY_TAGS = [
   'Strength & Conditioning',
@@ -70,11 +71,11 @@ export const GymRegistrationView: React.FC = () => {
   };
 
   // Validation
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const isOwnerEmailValid = emailRegex.test(ownerEmail.trim());
+  const isOwnerEmailValid = validateEmail(ownerEmail);
   const isGymNameValid = gymName.trim().length >= 2;
   const isOwnerNameValid = ownerName.trim().length >= 2;
-  const isPasswordValid = firebaseUser ? true : (password.length >= 6 && password === confirmPassword);
+  const passwordValidation = validatePassword(password);
+  const isPasswordValid = firebaseUser ? true : (passwordValidation.isValid && password === confirmPassword && confirmPassword.length > 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,8 +94,8 @@ export const GymRegistrationView: React.FC = () => {
     }
 
     if (!firebaseUser) {
-      if (password.length < 6) {
-        showToast('Password must be at least 6 characters long', 'error');
+      if (!passwordValidation.isValid) {
+        showToast(`Password requirements: ${passwordValidation.errors.join(', ')}`, 'error');
         return;
       }
       if (password !== confirmPassword) {
@@ -349,7 +350,8 @@ export const GymRegistrationView: React.FC = () => {
                           required
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          placeholder="Min 6 characters"
+                          placeholder="Min 8 chars, Aa1! required"
+                          autoComplete="new-password"
                           className={`${inputClass} pr-10`}
                         />
                         <button
@@ -360,6 +362,33 @@ export const GymRegistrationView: React.FC = () => {
                           {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                         </button>
                       </div>
+
+                      {/* Password Strength Checklist */}
+                      {password.length > 0 && (
+                        <div className="p-3 bg-[#f2f2f7] rounded-[14px] mt-2 space-y-1 text-[11px]">
+                          <div className="font-semibold text-[#1d1d1f] mb-1">Password Requirements:</div>
+                          <div className={`flex items-center gap-1.5 ${passwordValidation.hasMinLength ? 'text-[#34c759]' : 'text-[#8e8e93]'}`}>
+                            <span>{passwordValidation.hasMinLength ? '✓' : '○'}</span>
+                            <span>At least 8 characters</span>
+                          </div>
+                          <div className={`flex items-center gap-1.5 ${passwordValidation.hasUppercase ? 'text-[#34c759]' : 'text-[#8e8e93]'}`}>
+                            <span>{passwordValidation.hasUppercase ? '✓' : '○'}</span>
+                            <span>At least one uppercase letter (A-Z)</span>
+                          </div>
+                          <div className={`flex items-center gap-1.5 ${passwordValidation.hasLowercase ? 'text-[#34c759]' : 'text-[#8e8e93]'}`}>
+                            <span>{passwordValidation.hasLowercase ? '✓' : '○'}</span>
+                            <span>At least one lowercase letter (a-z)</span>
+                          </div>
+                          <div className={`flex items-center gap-1.5 ${passwordValidation.hasNumber ? 'text-[#34c759]' : 'text-[#8e8e93]'}`}>
+                            <span>{passwordValidation.hasNumber ? '✓' : '○'}</span>
+                            <span>At least one number (0-9)</span>
+                          </div>
+                          <div className={`flex items-center gap-1.5 ${passwordValidation.hasSpecialChar ? 'text-[#34c759]' : 'text-[#8e8e93]'}`}>
+                            <span>{passwordValidation.hasSpecialChar ? '✓' : '○'}</span>
+                            <span>At least one special character (!@#$%^&*)</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div>
@@ -370,10 +399,16 @@ export const GymRegistrationView: React.FC = () => {
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         placeholder="Re-enter password"
+                        autoComplete="new-password"
                         className={`${inputClass} ${
-                          confirmPassword && password !== confirmPassword ? 'border-[#ff3b30]' : ''
+                          confirmPassword && password !== confirmPassword ? 'border-[#ff3b30] focus:border-[#ff3b30]' : ''
                         }`}
                       />
+                      {confirmPassword && password !== confirmPassword && (
+                        <span className="text-[12px] text-[#ff3b30] font-medium mt-1 block">
+                          Passwords do not match
+                        </span>
+                      )}
                     </div>
                   </>
                 )}

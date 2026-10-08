@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+import { validatePassword, validateEmail } from '../../lib/validation.ts';
+
 type AuthTab = 'signin' | 'signup' | 'forgot';
 
 export const ReloginView: React.FC = () => {
@@ -58,10 +60,9 @@ export const ReloginView: React.FC = () => {
   }, [resendCooldown]);
 
   // Validation rules
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const isEmailValid = emailRegex.test(email.trim());
-  const isPasswordLengthValid = password.length >= 6;
-  const doPasswordsMatch = password === confirmPassword;
+  const isEmailValid = validateEmail(email);
+  const passwordValidation = validatePassword(password);
+  const doPasswordsMatch = password === confirmPassword && confirmPassword.length > 0;
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,8 +100,8 @@ export const ReloginView: React.FC = () => {
       showToast('Please enter a valid email address', 'error');
       return;
     }
-    if (!isPasswordLengthValid) {
-      showToast('Password must be at least 6 characters long', 'error');
+    if (!passwordValidation.isValid) {
+      showToast(`Password requirements: ${passwordValidation.errors.join(', ')}`, 'error');
       return;
     }
     if (!doPasswordsMatch) {
@@ -430,7 +431,7 @@ export const ReloginView: React.FC = () => {
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Minimum 6 characters"
+                      placeholder="Min 8 chars, Aa1! required"
                       autoComplete="new-password"
                       className={`${inputClass} pr-11`}
                     />
@@ -442,6 +443,33 @@ export const ReloginView: React.FC = () => {
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
+
+                  {/* Password Strength Checklist */}
+                  {password.length > 0 && (
+                    <div className="p-3 bg-[#f2f2f7] rounded-[14px] mt-2 space-y-1 text-[11px]">
+                      <div className="font-semibold text-[#1d1d1f] mb-1">Password Requirements:</div>
+                      <div className={`flex items-center gap-1.5 ${passwordValidation.hasMinLength ? 'text-[#34c759]' : 'text-[#8e8e93]'}`}>
+                        <span>{passwordValidation.hasMinLength ? '✓' : '○'}</span>
+                        <span>At least 8 characters</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 ${passwordValidation.hasUppercase ? 'text-[#34c759]' : 'text-[#8e8e93]'}`}>
+                        <span>{passwordValidation.hasUppercase ? '✓' : '○'}</span>
+                        <span>At least one uppercase letter (A-Z)</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 ${passwordValidation.hasLowercase ? 'text-[#34c759]' : 'text-[#8e8e93]'}`}>
+                        <span>{passwordValidation.hasLowercase ? '✓' : '○'}</span>
+                        <span>At least one lowercase letter (a-z)</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 ${passwordValidation.hasNumber ? 'text-[#34c759]' : 'text-[#8e8e93]'}`}>
+                        <span>{passwordValidation.hasNumber ? '✓' : '○'}</span>
+                        <span>At least one number (0-9)</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 ${passwordValidation.hasSpecialChar ? 'text-[#34c759]' : 'text-[#8e8e93]'}`}>
+                        <span>{passwordValidation.hasSpecialChar ? '✓' : '○'}</span>
+                        <span>At least one special character (!@#$%^&*)</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -469,7 +497,7 @@ export const ReloginView: React.FC = () => {
                   variant="primary"
                   size="lg"
                   isLoading={isSubmitting}
-                  disabled={!isPasswordLengthValid || !doPasswordsMatch || !isEmailValid}
+                  disabled={!passwordValidation.isValid || !doPasswordsMatch || !isEmailValid || !name.trim()}
                   className="w-full justify-center text-[14px] mt-2 font-semibold shadow-xs"
                 >
                   Create Firebase Account

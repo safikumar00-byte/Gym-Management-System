@@ -18,6 +18,7 @@ import {
   GymRegistrationPayload,
   registerNewGym
 } from '../lib/storage.ts';
+import { validatePassword } from '../lib/validation.ts';
 
 export type AppRole = 'owner' | 'manager' | 'trainer' | 'member';
 
@@ -191,6 +192,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       setLoading(true);
       setError(null);
+
+      const passValidation = validatePassword(pass);
+      if (!passValidation.isValid) {
+        const errorMsg = `Password requirement not met: ${passValidation.errors.join(', ')}`;
+        setError(errorMsg);
+        throw new Error(errorMsg);
+      }
+
       const cleanEmail = email.trim().toLowerCase();
       const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
       
@@ -208,13 +217,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await fetchProfileAndGym();
     } catch (err: any) {
       console.error('[Auth] Sign-up error:', err);
-      let userMsg = 'Failed to create account. Please try again.';
+      let userMsg = err.message || 'Failed to create account. Please try again.';
       if (err.code === 'auth/email-already-in-use') {
         userMsg = 'This email address is already registered. Please sign in instead.';
       } else if (err.code === 'auth/invalid-email') {
         userMsg = 'Please provide a valid email address.';
       } else if (err.code === 'auth/weak-password') {
-        userMsg = 'Password is too weak. Please use at least 6 characters with letters and numbers.';
+        userMsg = 'Password is too weak. Must be at least 8 characters with uppercase, lowercase, number, and special character.';
       }
       setError(userMsg);
       throw new Error(userMsg);
