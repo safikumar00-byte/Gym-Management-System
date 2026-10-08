@@ -4,7 +4,6 @@ import { db } from '../db/index.ts';
 import { gyms, userProfiles, gymCounters, membershipPlans, members } from '../db/schema.ts';
 import { eq, and } from 'drizzle-orm';
 import { logAuditEvent } from '../lib/audit.ts';
-import { seedOrResetDemoMember, DEMO_GYM_ID, DEMO_USER_ID, DEMO_MEMBER_ID } from '../lib/demo-member.ts';
 
 const router = Router();
 
@@ -194,60 +193,6 @@ router.post('/sync', requireAuth, async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Error in /api/auth/sync:', error);
     res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Failed to update user profile' } });
-  }
-});
-
-// POST /api/auth/demo-member - Dedicated Demo Member Sign-In
-router.post('/demo-member', async (req: Request, res: Response) => {
-  try {
-    let demoProfile: any = await db.query.userProfiles.findFirst({
-      where: eq(userProfiles.firebaseUid, 'uid-demo-member-alex'),
-      with: { gym: true },
-    });
-
-    if (!demoProfile) {
-      await seedOrResetDemoMember();
-      demoProfile = await db.query.userProfiles.findFirst({
-        where: eq(userProfiles.firebaseUid, 'uid-demo-member-alex'),
-        with: { gym: true },
-      });
-    }
-
-    const demoMember = await db.query.members.findFirst({
-      where: eq(members.id, DEMO_MEMBER_ID),
-    });
-
-    res.json({
-      token: 'test-token-demo-member',
-      user: {
-        userId: demoProfile.id,
-        firebaseUid: 'uid-demo-member-alex',
-        gymId: demoProfile.gymId,
-        role: 'MEMBER',
-        name: demoProfile.name,
-        email: demoProfile.email,
-      },
-      gym: demoProfile.gym,
-      member: demoMember,
-    });
-  } catch (error: any) {
-    console.error('Error in /api/auth/demo-member:', error);
-    res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Failed to initialize demo member session' } });
-  }
-});
-
-// POST /api/auth/demo-member/reset - Safe Demo Data Reset
-router.post('/demo-member/reset', async (req: Request, res: Response) => {
-  try {
-    const data = await seedOrResetDemoMember();
-    res.json({
-      success: true,
-      message: 'Demo member data restored to pristine state.',
-      ...data,
-    });
-  } catch (error: any) {
-    console.error('Error in /api/auth/demo-member/reset:', error);
-    res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Failed to reset demo member data' } });
   }
 });
 

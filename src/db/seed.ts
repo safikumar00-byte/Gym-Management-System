@@ -25,11 +25,14 @@ export async function seedDatabaseIfEmpty(): Promise<{ seeded: boolean; gym?: an
   try {
     const existingGym = await db.query.gyms.findFirst();
     if (existingGym) {
-      console.log(`[Gym Manager] Database ready. Initialized with gym: ${existingGym.name}`);
       return { seeded: false, gym: existingGym, reason: 'ALREADY_INITIALIZED' };
     }
 
-    console.log('[Gym Manager] Seeding initial gym database with demo dataset...');
+    if (process.env.ALLOW_MANUAL_SEED !== 'true') {
+      return { seeded: false, reason: 'AUTOMATIC_SEED_DISABLED_FOR_PRODUCTION' };
+    }
+
+    console.log('[Gym Manager] Manual seed flag detected. Seeding test dataset...');
 
     // 1. Insert Gym
     const [insertedGym] = await db.insert(gyms).values({

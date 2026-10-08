@@ -14,16 +14,6 @@ import {
   ExpiringMemberItem 
 } from '../types';
 import { 
-  INITIAL_GYM, 
-  INITIAL_USER, 
-  INITIAL_PLANS, 
-  INITIAL_MEMBERS, 
-  INITIAL_MEMBERSHIPS, 
-  INITIAL_PAYMENTS, 
-  INITIAL_EXPENSES, 
-  INITIAL_NOTIFICATIONS 
-} from './seedData.ts';
-import { 
   getTodayString, 
   calculatePendingAmount, 
   calculateNetIncome, 
@@ -322,19 +312,7 @@ export function updateUser(updates: Partial<UserProfile>): UserProfile {
   return cachedUser;
 }
 
-// ---------------------- REGISTERED ACCOUNTS & GYM GENERATION ----------------------
-
-export interface RegisteredAccount {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  password?: string;
-  role: 'owner' | 'manager' | 'trainer';
-  gymId: string;
-  gymName: string;
-  createdAt: string;
-}
+// ---------------------- GYM REGISTRATION ----------------------
 
 export interface GymRegistrationPayload {
   gymName: string;
@@ -352,270 +330,57 @@ export interface GymRegistrationPayload {
   password?: string;
 }
 
-const DEFAULT_REGISTERED_ACCOUNTS: RegisteredAccount[] = [
-  {
-    id: 'user-01',
-    name: 'Rajesh Sharma',
-    email: 'rajesh@ironcoregym.com',
-    phone: '+91 98765 43210',
-    password: 'admin123',
-    role: 'owner',
-    gymId: 'gym-01',
-    gymName: 'Iron Core Fitness',
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'user-02',
-    name: 'Amit Patel',
-    email: 'amit@ironcoregym.com',
-    phone: '+91 98765 43211',
-    password: 'manager123',
-    role: 'manager',
-    gymId: 'gym-01',
-    gymName: 'Iron Core Fitness',
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'user-03',
-    name: 'Vikram Singh',
-    email: 'vikram@ironcoregym.com',
-    phone: '+91 98765 43212',
-    password: 'trainer123',
-    role: 'trainer',
-    gymId: 'gym-01',
-    gymName: 'Iron Core Fitness',
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'user-04',
-    name: 'Kiran Reddy',
-    email: 'kiran@rawpowergym.in',
-    phone: '+91 98450 11223',
-    password: 'admin123',
-    role: 'owner',
-    gymId: 'gym-rawpower',
-    gymName: 'Raw Power Gym',
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-];
-
-const STORAGE_REGISTERED_ACCOUNTS_KEY = 'gym_manager_registered_accounts_v2';
-
-export function getRegisteredAccounts(): RegisteredAccount[] {
-  if (typeof window === 'undefined') return DEFAULT_REGISTERED_ACCOUNTS;
-  try {
-    const raw = localStorage.getItem(STORAGE_REGISTERED_ACCOUNTS_KEY);
-    if (!raw) {
-      localStorage.setItem(STORAGE_REGISTERED_ACCOUNTS_KEY, JSON.stringify(DEFAULT_REGISTERED_ACCOUNTS));
-      return DEFAULT_REGISTERED_ACCOUNTS;
-    }
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
-    }
-    return DEFAULT_REGISTERED_ACCOUNTS;
-  } catch (e) {
-    return DEFAULT_REGISTERED_ACCOUNTS;
-  }
-}
-
-export function saveRegisteredAccount(account: RegisteredAccount): void {
-  const accounts = getRegisteredAccounts();
-  const existingIdx = accounts.findIndex(a => a.email.toLowerCase() === account.email.toLowerCase());
-  if (existingIdx >= 0) {
-    accounts[existingIdx] = { ...accounts[existingIdx], ...account };
-  } else {
-    accounts.push(account);
-  }
-  try {
-    localStorage.setItem(STORAGE_REGISTERED_ACCOUNTS_KEY, JSON.stringify(accounts));
-  } catch (e) {
-    console.error('Failed to save account', e);
-  }
-}
-
-export function authenticateWithPassword(
-  email: string, 
-  password: string
-): { success: boolean; account?: RegisteredAccount; error?: string } {
-  const cleanEmail = email.trim().toLowerCase();
-  const cleanPass = password.trim();
-
-  const accounts = getRegisteredAccounts();
-  const matched = accounts.find(a => a.email.toLowerCase() === cleanEmail);
-
-  if (!matched) {
-    // If not found in registered accounts list, check if user is entering admin123 for cachedUser
-    if (cachedUser?.email && cleanEmail === cachedUser.email.toLowerCase() && cleanPass === 'admin123') {
-      const defaultAccount: RegisteredAccount = {
-        id: cachedUser.id,
-        name: cachedUser.name,
-        email: cachedUser.email,
-        phone: cachedUser.phone,
-        password: cleanPass,
-        role: (cachedUser.role?.toLowerCase() as any) || 'owner',
-        gymId: cachedGym.id,
-        gymName: cachedGym.name,
-        createdAt: new Date().toISOString(),
-      };
-      saveRegisteredAccount(defaultAccount);
-      return { success: true, account: defaultAccount };
-    }
-    return { 
-      success: false, 
-      error: `No registered account found for '${cleanEmail}'. Please verify the email address or register a new gym account.` 
-    };
-  }
-
-  // Verify password
-  if (matched.password && matched.password !== cleanPass) {
-    return {
-      success: false,
-      error: 'Incorrect password. Please verify your password or use the OTP code option.',
-    };
-  }
-
-  return { success: true, account: matched };
-}
-
 export async function registerNewGym(payload: GymRegistrationPayload): Promise<{ gym: Gym; user: UserProfile }> {
-  const gymId = 'gym-' + Date.now();
-  const userId = 'user-' + Date.now();
-  const createdDate = new Date().toISOString();
-
-  const newGym: Gym = {
-    id: gymId,
-    name: payload.gymName.trim(),
-    phone: payload.phone?.trim() || payload.ownerPhone?.trim() || '',
-    email: payload.email?.trim() || payload.ownerEmail.trim(),
-    address: payload.address?.trim() || '',
-    receiptPrefix: (payload.receiptPrefix?.trim() || 'GM-').toUpperCase(),
-    receiptFooter: payload.receiptFooter?.trim() || 'Thank you for training with us! Fees once paid are non-refundable.',
-    upiId: payload.upiId?.trim() || '',
-    defaultPaymentMethod: 'UPI',
-    currency: (payload.currency?.trim() || 'INR').toUpperCase(),
-    createdAt: createdDate,
-    updatedAt: createdDate,
-  };
-
-  const newUser: UserProfile = {
-    id: userId,
-    gymId: gymId,
-    name: payload.ownerName.trim(),
-    email: payload.ownerEmail.trim().toLowerCase(),
-    phone: payload.ownerPhone?.trim() || payload.phone?.trim() || '',
-    role: 'owner',
-    isVerified: true,
-    verificationMethod: payload.ownerPhone ? 'phone' : 'email',
-    verificationDate: createdDate,
-    createdAt: createdDate,
-  };
-
-  // Create starter membership plans tailored to this gym
-  const starterPlans: MembershipPlan[] = [
-    {
-      id: 'plan-' + Date.now() + '-1',
-      gymId: gymId,
-      name: 'Monthly Core Access',
-      durationMonths: 1,
-      durationDays: 30,
-      price: 1500,
-      description: 'Standard 1-month fitness & gym floor access',
-      isActive: true,
-      status: 'active',
-      createdAt: createdDate,
-      updatedAt: createdDate,
-    },
-    {
-      id: 'plan-' + Date.now() + '-2',
-      gymId: gymId,
-      name: 'Quarterly Power Plan',
-      durationMonths: 3,
-      durationDays: 90,
-      price: 3800,
-      description: '3-month quarterly membership with locker & cardio access',
-      isActive: true,
-      status: 'active',
-      createdAt: createdDate,
-      updatedAt: createdDate,
-    },
-    {
-      id: 'plan-' + Date.now() + '-3',
-      gymId: gymId,
-      name: 'Annual Elite Membership',
-      durationMonths: 12,
-      durationDays: 365,
-      price: 12000,
-      description: 'Full 1-year unlimited access with diet consultation',
-      isActive: true,
-      status: 'active',
-      createdAt: createdDate,
-      updatedAt: createdDate,
-    },
-  ];
-
-  // Set as authoritative cached gym and user
-  cachedGym = newGym;
-  cachedUser = newUser;
-  cachedPlans = starterPlans;
-  cachedMembers = [];
-  cachedMemberships = [];
-  cachedPayments = [];
-  cachedExpenses = [];
-  cachedNotifications = [
-    {
-      id: 'notif-' + Date.now(),
-      gymId: gymId,
-      type: 'general',
-      title: `Welcome to ${newGym.name}!`,
-      message: 'Your new gym workspace has been created. Customize plans or register your first members anytime.',
-      date: getTodayString(),
-      read: false,
-      isRead: false,
-    },
-  ];
-
-  // Save registered account credentials for Email+Password logins
-  const newAccount: RegisteredAccount = {
-    id: userId,
-    name: newUser.name,
-    email: newUser.email,
-    phone: newUser.phone,
-    password: payload.password || 'admin123',
-    role: 'owner',
-    gymId: gymId,
-    gymName: newGym.name,
-    createdAt: createdDate,
-  };
-  saveRegisteredAccount(newAccount);
-
-  // Attempt backend PostgreSQL sync
   try {
     const apiResult = await api.registerGym({
-      gymName: newGym.name,
-      phone: newGym.phone,
-      email: newGym.email,
-      address: newGym.address,
-      upiId: newGym.upiId,
-      currency: newGym.currency,
-      receiptPrefix: newGym.receiptPrefix,
-      receiptFooter: newGym.receiptFooter,
-      ownerName: newUser.name,
-      ownerEmail: newUser.email,
-      ownerPhone: newUser.phone,
+      gymName: payload.gymName.trim(),
+      phone: payload.phone?.trim() || payload.ownerPhone?.trim() || '',
+      email: payload.email?.trim() || payload.ownerEmail.trim(),
+      address: payload.address?.trim() || '',
+      upiId: payload.upiId?.trim() || '',
+      currency: (payload.currency?.trim() || 'INR').toUpperCase(),
+      receiptPrefix: (payload.receiptPrefix?.trim() || 'GM-').toUpperCase(),
+      receiptFooter: payload.receiptFooter?.trim() || 'Thank you for training with us! Fees once paid are non-refundable.',
+      ownerName: payload.ownerName.trim(),
+      ownerEmail: payload.ownerEmail.trim().toLowerCase(),
+      ownerPhone: payload.ownerPhone?.trim() || payload.phone?.trim() || '',
     });
-    if (apiResult?.gym?.id) {
-      cachedGym.id = apiResult.gym.id;
-    }
-    if (apiResult?.user?.id) {
-      cachedUser.id = apiResult.user.id;
-    }
-  } catch (err) {
-    console.warn('Backend gym registration handled in local memory:', err);
-  }
 
-  notifyListeners();
-  return { gym: cachedGym, user: cachedUser };
+    if (apiResult?.gym) {
+      cachedGym = {
+        id: apiResult.gym.id,
+        name: apiResult.gym.name,
+        phone: apiResult.gym.phone || '',
+        email: apiResult.gym.email || '',
+        address: apiResult.gym.address || '',
+        receiptPrefix: apiResult.gym.receiptPrefix || 'GM-',
+        receiptFooter: apiResult.gym.receiptFooter || '',
+        upiId: apiResult.gym.upiId || '',
+        defaultPaymentMethod: 'UPI',
+        currency: apiResult.gym.currency || 'INR',
+        createdAt: apiResult.gym.createdAt,
+        updatedAt: apiResult.gym.updatedAt,
+      };
+    }
+
+    if (apiResult?.user) {
+      cachedUser = {
+        id: apiResult.user.id,
+        gymId: apiResult.gym?.id || '',
+        name: apiResult.user.name,
+        email: apiResult.user.email || '',
+        role: 'owner',
+        createdAt: apiResult.user.createdAt,
+      };
+    }
+
+    await syncWithCloud();
+    notifyListeners();
+    return { gym: cachedGym, user: cachedUser };
+  } catch (err: any) {
+    console.error('Failed to register gym in cloud:', err);
+    throw err;
+  }
 }
 
 // ---------------------- PLANS ----------------------
@@ -1393,21 +1158,4 @@ export function importDataJson(jsonString: string): { success: boolean; message:
   }
 }
 
-export function resetDemoData(): void {
-  cachedGym = { ...INITIAL_GYM };
-  cachedPlans = [...INITIAL_PLANS];
-  cachedMembers = [...INITIAL_MEMBERS];
-  cachedMemberships = [...INITIAL_MEMBERSHIPS];
-  cachedPayments = INITIAL_PAYMENTS.map(p => ({
-    ...p,
-    date: p.date || p.paymentDate || getTodayString(),
-    paymentDate: p.paymentDate || p.date || getTodayString(),
-  }));
-  cachedExpenses = [...INITIAL_EXPENSES];
-  cachedNotifications = [...INITIAL_NOTIFICATIONS];
-  notifyListeners();
-  syncWithCloud();
-}
-
-export const resetToDemoData = resetDemoData;
 

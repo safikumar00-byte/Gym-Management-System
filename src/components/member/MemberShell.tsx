@@ -32,25 +32,10 @@ interface MemberShellProps {
 }
 
 export const MemberShell: React.FC<MemberShellProps> = ({ onOpenAuth, onSwitchToStaff }) => {
-  const { gym, userProfile, updateRole, logout, isDemoMember, resetDemoMemberData, linkedMember } = useAuth();
+  const { gym, userProfile, updateRole, logout, linkedMember } = useAuth();
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<MemberNavTab>('dashboard');
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  const handleResetDemoData = async () => {
-    try {
-      setIsResetting(true);
-      await resetDemoMemberData();
-      setRefreshKey(k => k + 1);
-      showToast('Demo data restored to initial state!', 'success');
-    } catch (err: any) {
-      showToast(err.message || 'Failed to reset demo data', 'error');
-    } finally {
-      setIsResetting(false);
-    }
-  };
 
   const navItems = [
     { id: 'dashboard' as MemberNavTab, label: 'Dashboard', icon: Home },
@@ -74,17 +59,11 @@ export const MemberShell: React.FC<MemberShellProps> = ({ onOpenAuth, onSwitchTo
             <div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="font-bold text-[15px] text-[#1d1d1f] tracking-tight">
-                  {gym?.name || 'Raw Power Gym'}
+                  {gym?.name || 'My Fitness Gym'}
                 </span>
                 <span className="text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-full bg-[#af52de]/10 text-[#af52de] border border-[#af52de]/20">
                   Member App
                 </span>
-                {isDemoMember && (
-                  <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-[#ff9500]/15 text-[#b25e00] border border-[#ff9500]/30">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#ff9500] animate-pulse" />
-                    DEMO MODE
-                  </span>
-                )}
               </div>
             </div>
           </div>
@@ -113,18 +92,6 @@ export const MemberShell: React.FC<MemberShellProps> = ({ onOpenAuth, onSwitchTo
 
           {/* Right Header Actions */}
           <div className="flex items-center gap-2">
-            {isDemoMember && (
-              <button
-                onClick={handleResetDemoData}
-                disabled={isResetting}
-                className="flex items-center gap-1 px-2.5 py-1 bg-[#fff5eb] hover:bg-[#ffe8d1] text-[#b25e00] text-[11px] font-semibold rounded-full border border-[#ff9500]/30 transition-all cursor-pointer disabled:opacity-50"
-                title="Reset demo member data back to initial clean state"
-              >
-                <RotateCcw size={12} className={isResetting ? 'animate-spin' : ''} />
-                <span className="hidden sm:inline">{isResetting ? 'Resetting...' : 'Reset Demo'}</span>
-              </button>
-            )}
-
             <button
               onClick={() => setIsQRModalOpen(true)}
               className="p-2 bg-[#f5f5f7] hover:bg-[#e8e8ed] text-[#1d1d1f] rounded-full transition-all border border-[#e5e5ea] cursor-pointer"
@@ -134,7 +101,7 @@ export const MemberShell: React.FC<MemberShellProps> = ({ onOpenAuth, onSwitchTo
             </button>
 
             {/* Quick Switch to Staff / Owner for Admin Testing in Development only */}
-            {import.meta.env.DEV && !isDemoMember && (
+            {import.meta.env.DEV && (
               <button
                 onClick={() => updateRole('owner')}
                 className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-[#f0f4ff] hover:bg-[#e1ecff] text-[#0071e3] text-[12px] font-semibold rounded-full border border-[#0071e3]/20 transition-all cursor-pointer"
@@ -161,7 +128,7 @@ export const MemberShell: React.FC<MemberShellProps> = ({ onOpenAuth, onSwitchTo
       </header>
 
       {/* Main Content Area */}
-      <main key={refreshKey} className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 pt-6 pb-28 md:pb-12">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 pt-6 pb-28 md:pb-12">
         {activeTab === 'dashboard' && (
           <MemberDashboardView
             onNavigate={(tab) => setActiveTab(tab)}

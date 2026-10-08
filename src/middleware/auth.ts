@@ -5,7 +5,6 @@ import { db } from '../db/index.ts';
 import { userProfiles, gyms, gymCounters, membershipPlans, members } from '../db/schema.ts';
 import { eq, and, ne } from 'drizzle-orm';
 import { logAuditEvent } from '../lib/audit.ts';
-import { seedOrResetDemoMember, DEMO_MEMBER_ID, DEMO_GYM_ID } from '../lib/demo-member.ts';
 
 export type UserRole = 'OWNER' | 'MANAGER' | 'TRAINER' | 'MEMBER';
 
@@ -38,27 +37,14 @@ export const requireAuth = async (
   const token = authHeader.split('Bearer ')[1];
   try {
     let decodedToken: DecodedIdToken;
-    if (token === 'test-token-demo-member' || token.includes('demo-member')) {
-      decodedToken = {
-        uid: 'uid-demo-member-alex',
-        email: 'demo-member@demo.rawpowergym.app',
-        name: 'Alex Johnson',
-        auth_time: Math.floor(Date.now() / 1000),
-        iss: 'https://securetoken.google.com/test',
-        sub: 'uid-demo-member-alex',
-        aud: 'test',
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600 * 24,
-        firebase: { identities: {}, sign_in_provider: 'custom' },
-      } as DecodedIdToken;
-    } else if (process.env.NODE_ENV !== 'production' && token.startsWith('test-token-')) {
+    if (process.env.NODE_ENV !== 'production' && token.startsWith('test-token-')) {
       const isMember = token.includes('member');
       const isManager = token.includes('manager');
       const isTrainer = token.includes('trainer');
       const role = isMember ? 'MEMBER' : isManager ? 'MANAGER' : isTrainer ? 'TRAINER' : 'OWNER';
       const uid = `uid-${token}`;
       let email = isMember ? 'member@testgym.com' : `${role.toLowerCase()}@testgym.com`;
-      let name = isMember ? 'Aditya Verma (Member)' : `Test ${role}`;
+      let name = isMember ? 'Gym Member' : `Test ${role}`;
       if (token.includes('rohit')) {
         email = 'rohit.sharma@testlifecycle.com';
         name = 'Rohit Sharma';
@@ -79,34 +65,6 @@ export const requireAuth = async (
       decodedToken = await adminAuth.verifyIdToken(token);
     }
     req.decodedToken = decodedToken;
-
-    // Special handling for Demo Member: ensure isolated tenant is initialized
-    if (decodedToken.uid === 'uid-demo-member-alex') {
-      let demoProfile: any = await db.query.userProfiles.findFirst({
-        where: eq(userProfiles.firebaseUid, 'uid-demo-member-alex'),
-        with: { gym: true },
-      });
-      if (!demoProfile) {
-        await seedOrResetDemoMember();
-        demoProfile = await db.query.userProfiles.findFirst({
-          where: eq(userProfiles.firebaseUid, 'uid-demo-member-alex'),
-          with: { gym: true },
-        });
-      }
-
-      req.user = {
-        firebaseUid: decodedToken.uid,
-        userId: demoProfile.id,
-        gymId: demoProfile.gymId,
-        role: 'MEMBER',
-        name: demoProfile.name,
-        email: demoProfile.email,
-        gymStatus: 'ACTIVE',
-        memberId: DEMO_MEMBER_ID,
-      };
-
-      return next();
-    }
 
     // Look up user profile and gym in PostgreSQL
     let profile: any = await db.query.userProfiles.findFirst({
@@ -146,9 +104,7 @@ export const requireAuth = async (
           }
 
           if (!targetGym && (isMember || isManager || isTrainer) && !decodedToken.uid.includes('tenant2')) {
-            targetGym = await tx.query.gyms.findFirst({
-              where: ne(gyms.id, DEMO_GYM_ID),
-            });
+            targetGym = await tx.query.gyms.findFirst();
           }
 
           if (!targetGym) {

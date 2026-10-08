@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '../ui/Button';
-import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { AppIcon } from '../ui/AppIcon';
 import { Gym, User } from '../../types';
 import { 
@@ -9,8 +8,7 @@ import {
   getUser, 
   saveUser, 
   exportAllDataJson, 
-  importDataJson, 
-  resetToDemoData 
+  importDataJson 
 } from '../../lib/storage';
 import { useToast } from '../ui/Toast';
 import { useAuth } from '../../context/AuthContext.tsx';
@@ -20,7 +18,6 @@ export const SettingsView: React.FC = () => {
   const { user: authUser, role, setRole, logout } = useAuth();
   const [gym, setGymState] = useState<Gym>(getGym());
   const [user, setUserState] = useState<User>(getUser());
-  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
 
   useEffect(() => {
     setGymState(getGym());
@@ -72,12 +69,6 @@ export const SettingsView: React.FC = () => {
     reader.readAsText(file);
   };
 
-  const handleResetDemoData = () => {
-    resetToDemoData();
-    showToast('Reset to initial data');
-    setTimeout(() => window.location.reload(), 800);
-  };
-
   const inputClass = "w-full px-3.5 py-2.5 bg-[#f2f2f7] hover:bg-[#ebebed] focus:bg-white border border-transparent focus:border-[#0071e3] rounded-[12px] text-[14px] text-[#1d1d1f] placeholder-[#8e8e93] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20 transition-all";
   const labelClass = "text-[13px] font-medium text-[#1d1d1f] mb-1 block tracking-tight";
 
@@ -127,18 +118,18 @@ export const SettingsView: React.FC = () => {
                 key={r.id}
                 type="button"
                 onClick={() => {
-                  setRole(r.id);
+                  setRole(r.id as any);
                   showToast(`Role switched to ${r.label}`);
                 }}
                 className={`p-3 rounded-[14px] border text-left transition-all cursor-pointer ${
-                  role === r.id
+                  role.toUpperCase() === r.id
                     ? 'border-[#0071e3] bg-[#0071e3]/5 shadow-2xs'
                     : 'border-[#e5e5ea] bg-white hover:bg-[#fafafc]'
                 }`}
               >
                 <div className="text-[13px] font-semibold text-[#1d1d1f]">{r.label}</div>
                 <div className="text-[11px] text-[#8e8e93] mt-0.5">
-                  {role === r.id ? '● Active' : 'Select'}
+                  {role.toUpperCase() === r.id ? '● Active' : 'Select'}
                 </div>
               </button>
             ))}
@@ -151,32 +142,35 @@ export const SettingsView: React.FC = () => {
         <div className="p-6 bg-white border border-[#e5e5ea] rounded-[22px] shadow-xs space-y-4">
           <div className="border-b border-[#f0f0f2] pb-3">
             <h3 className="text-[16px] font-bold text-[#1d1d1f] tracking-tight">
-              Gym Branding & Contact
+              Gym Identity & Branding
             </h3>
-            <p className="text-[12px] text-[#8e8e93]">Displayed on receipts, headers, and WhatsApp messages</p>
+            <p className="text-[12px] text-[#8e8e93]">Details displayed on receipts and WhatsApp reminders</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className={labelClass}>Gym Name *</label>
+              <label className={labelClass}>Gym Name</label>
               <input
                 type="text"
-                required
                 value={gym.name}
                 onChange={(e) => setGymState({ ...gym, name: e.target.value })}
                 className={inputClass}
+                placeholder="e.g. Iron Core Fitness"
+                required
               />
             </div>
+
             <div>
-              <label className={labelClass}>Contact Phone *</label>
+              <label className={labelClass}>Gym Contact Phone</label>
               <input
                 type="tel"
-                required
                 value={gym.phone}
                 onChange={(e) => setGymState({ ...gym, phone: e.target.value })}
                 className={inputClass}
+                placeholder="+91 98765 43210"
               />
             </div>
+
             <div>
               <label className={labelClass}>Email Address</label>
               <input
@@ -184,39 +178,41 @@ export const SettingsView: React.FC = () => {
                 value={gym.email}
                 onChange={(e) => setGymState({ ...gym, email: e.target.value })}
                 className={inputClass}
+                placeholder="contact@gym.com"
               />
             </div>
+
             <div>
-              <label className={labelClass}>GSTIN / Tax ID</label>
+              <label className={labelClass}>Currency Code</label>
               <input
                 type="text"
-                value={gym.gstin || ''}
-                onChange={(e) => setGymState({ ...gym, gstin: e.target.value })}
-                placeholder="e.g. 29AAAAA0000A1Z5"
+                value={gym.currency}
+                onChange={(e) => setGymState({ ...gym, currency: e.target.value.toUpperCase() })}
                 className={inputClass}
+                placeholder="INR"
               />
             </div>
+
             <div className="sm:col-span-2">
-              <label className={labelClass}>Physical Address</label>
+              <label className={labelClass}>Address & Location</label>
               <input
                 type="text"
                 value={gym.address}
                 onChange={(e) => setGymState({ ...gym, address: e.target.value })}
                 className={inputClass}
+                placeholder="Building, street, area, city, pincode"
               />
             </div>
           </div>
         </div>
 
-        {/* Section 2: Receipt & Payment Parameters */}
+        {/* Section 2: Invoicing & Receipt Numbers */}
         <div className="p-6 bg-white border border-[#e5e5ea] rounded-[22px] shadow-xs space-y-4">
           <div className="border-b border-[#f0f0f2] pb-3">
             <h3 className="text-[16px] font-bold text-[#1d1d1f] tracking-tight">
-              Receipt & Invoicing Parameters
+              Receipts & Sequential Numbering
             </h3>
-            <p className="text-[12px] text-[#8e8e93]">
-              Prefixing sequence and business UPI settlement parameters
-            </p>
+            <p className="text-[12px] text-[#8e8e93]">Configure invoice prefixes and customized footer policy</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -225,50 +221,83 @@ export const SettingsView: React.FC = () => {
               <input
                 type="text"
                 value={gym.receiptPrefix}
-                onChange={(e) => setGymState({ ...gym, receiptPrefix: e.target.value })}
+                onChange={(e) => setGymState({ ...gym, receiptPrefix: e.target.value.toUpperCase() })}
                 className={inputClass}
+                placeholder="GM-"
               />
+              <span className="text-[11px] text-[#8e8e93] mt-1 block">
+                Generated format: {gym.receiptPrefix}001, {gym.receiptPrefix}002...
+              </span>
             </div>
+
             <div>
-              <label className={labelClass}>Business UPI ID</label>
-              <input
-                type="text"
-                value={gym.upiId || ''}
-                placeholder="e.g. ironforge@okhdfcbank"
-                onChange={(e) => setGymState({ ...gym, upiId: e.target.value })}
+              <label className={labelClass}>Default Payment Mode</label>
+              <select
+                value={gym.defaultPaymentMethod}
+                onChange={(e) => setGymState({ ...gym, defaultPaymentMethod: e.target.value as any })}
                 className={inputClass}
-              />
+              >
+                <option value="UPI">UPI (Google Pay / PhonePe / Paytm)</option>
+                <option value="Cash">Cash</option>
+                <option value="Card">Credit / Debit Card</option>
+                <option value="Bank Transfer">Bank Transfer / NEFT</option>
+              </select>
             </div>
+
             <div className="sm:col-span-2">
-              <label className={labelClass}>Receipt Footer Note</label>
-              <input
-                type="text"
-                value={gym.receiptFooter || ''}
-                placeholder="Thank you for training with us! Fees once paid are non-refundable."
+              <label className={labelClass}>Receipt Footer Note / Terms</label>
+              <textarea
+                value={gym.receiptFooter}
                 onChange={(e) => setGymState({ ...gym, receiptFooter: e.target.value })}
-                className={inputClass}
+                className={`${inputClass} h-20 resize-none`}
+                placeholder="Terms and conditions printed at bottom of PDF receipts"
               />
             </div>
           </div>
         </div>
 
-        {/* Save Button */}
+        {/* Section 3: Digital Payments & UPI */}
+        <div className="p-6 bg-white border border-[#e5e5ea] rounded-[22px] shadow-xs space-y-4">
+          <div className="border-b border-[#f0f0f2] pb-3">
+            <h3 className="text-[16px] font-bold text-[#1d1d1f] tracking-tight">
+              UPI & Digital Collect
+            </h3>
+            <p className="text-[12px] text-[#8e8e93]">Display UPI ID and QR on bills for fast instant payment collection</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>Business UPI VPA</label>
+              <input
+                type="text"
+                value={gym.upiId}
+                onChange={(e) => setGymState({ ...gym, upiId: e.target.value })}
+                className={inputClass}
+                placeholder="gymname@okaxis"
+              />
+              <span className="text-[11px] text-[#8e8e93] mt-1 block">
+                Used to auto-generate dynamic payment QR codes on digital receipts
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Save Bar */}
         <div className="flex justify-end">
-          <Button type="submit" variant="primary" size="md" className="gap-2">
-            <AppIcon name="checkmark" size={15} strokeWidth={2.4} />
-            <span>Save Settings</span>
+          <Button type="submit" variant="primary" size="lg" className="px-8 shadow-xs">
+            Save All Settings
           </Button>
         </div>
       </form>
 
-      {/* Section 3: Data Recovery & Backups */}
+      {/* Section 4: Data Management & Backup */}
       <div className="p-6 bg-white border border-[#e5e5ea] rounded-[22px] shadow-xs space-y-4">
         <div className="border-b border-[#f0f0f2] pb-3">
           <h3 className="text-[16px] font-bold text-[#1d1d1f] tracking-tight">
-            Database Backup & Recovery
+            Database Backup & Portability
           </h3>
           <p className="text-[12px] text-[#8e8e93]">
-            Export or import your full database (members, plans, payments, expenses)
+            Export or restore your full database records in JSON format
           </p>
         </div>
 
@@ -288,30 +317,8 @@ export const SettingsView: React.FC = () => {
               className="hidden"
             />
           </label>
-
-          <button
-            type="button"
-            onClick={() => setIsResetConfirmOpen(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-[#ff3b30] hover:bg-[#ff3b30]/10 rounded-full transition-colors text-[13px] font-medium ml-auto cursor-pointer"
-          >
-            <AppIcon name="arrow.counterclockwise" size={14} />
-            <span>Reset Demo Data</span>
-          </button>
         </div>
       </div>
-
-      {/* Reset Confirmation Dialog */}
-      {isResetConfirmOpen && (
-        <ConfirmDialog
-          isOpen={isResetConfirmOpen}
-          onClose={() => setIsResetConfirmOpen(false)}
-          onConfirm={handleResetDemoData}
-          title="Reset Application Data?"
-          message="This will erase any newly added members or transactions and restore initial demo records. Are you sure?"
-          confirmLabel="Reset Everything"
-          isDestructive={true}
-        />
-      )}
     </div>
   );
 };

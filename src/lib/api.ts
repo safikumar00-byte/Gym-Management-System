@@ -28,15 +28,6 @@ async function getAuthHeader(): Promise<HeadersInit> {
     }
   }
 
-  // Fallback or explicit token stored in session (e.g. demo member session token)
-  const sessionToken = typeof localStorage !== 'undefined' ? localStorage.getItem('gym_manager_auth_token') : null;
-  if (sessionToken) {
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${sessionToken}`,
-    };
-  }
-
   return {
     'Content-Type': 'application/json',
   };
@@ -202,8 +193,4 @@ export const api = {
     apiRequest(`/api/community/posts/${postId}/reactions`, { method: 'POST', body: JSON.stringify({ reactionType }) }),
   reportCommunityPost: (postId: string, reason: string) => 
     apiRequest(`/api/community/posts/${postId}/report`, { method: 'POST', body: JSON.stringify({ reason }) }),
-  
-  // Dedicated Demo Member Operations
-  loginDemoMember: () => apiRequest('/api/auth/demo-member', { method: 'POST' }),
-  resetDemoMember: () => apiRequest('/api/auth/demo-member/reset', { method: 'POST' }),
 };

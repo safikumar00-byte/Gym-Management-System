@@ -1,124 +1,138 @@
-import React, { useState } from 'react';
-import { useAuth, AppRole } from '../../context/AuthContext';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import { Button } from '../ui/Button';
 import { useToast } from '../ui/Toast';
 import { 
   Dumbbell, 
-  Crown, 
-  Briefcase, 
-  UserCheck2, 
   Lock, 
-  Sparkles, 
-  Smartphone, 
   Mail, 
   ArrowRight, 
   ShieldCheck,
-  Zap,
-  KeyRound,
   Building2,
   Eye,
-  EyeOff
+  EyeOff,
+  User,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-type ReloginTab = 'fast' | 'email' | 'phone' | 'google';
+type AuthTab = 'signin' | 'signup' | 'forgot';
 
 export const ReloginView: React.FC = () => {
   const { 
-    lastLoggedOutAccount, 
-    gym, 
-    reloginFast, 
+    firebaseUser,
+    isLoggedIn,
+    isEmailVerified,
+    signInWithEmailPassword, 
+    signUpWithEmailPassword, 
     signInWithGoogle, 
-    signInAsDemoMember,
-    signInWithPhoneFast, 
-    startPhoneSetup, 
-    verifyPhoneSetup,
-    signInWithEmailFast,
-    signInWithEmailPassword,
-    startEmailSetup,
-    verifyEmailSetup,
-    pendingSetup,
-    clearPendingSetup,
+    sendVerificationEmail,
+    sendPasswordReset,
+    reloadUser,
+    logout,
     setAuthScreen
   } = useAuth();
 
   const { showToast } = useToast();
-  const rememberedAccount = lastLoggedOutAccount;
-  const [activeTab, setActiveTab] = useState<ReloginTab>(() => rememberedAccount ? 'fast' : 'email');
+  const [activeTab, setActiveTab] = useState<AuthTab>('signin');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleDemoMemberLogin = async () => {
+  // Form Fields
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Cooldown timers
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
+  // Validation rules
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const isEmailValid = emailRegex.test(email.trim());
+  const isPasswordLengthValid = password.length >= 6;
+  const doPasswordsMatch = password === confirmPassword;
+
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      showToast('Please enter your email address', 'error');
+      return;
+    }
+    if (!isEmailValid) {
+      showToast('Please enter a valid email address format', 'error');
+      return;
+    }
+    if (!password) {
+      showToast('Please enter your password', 'error');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
-      await signInAsDemoMember();
-      showToast('Welcome to Raw Power Gym — Demo, Alex!');
+      await signInWithEmailPassword(email, password);
+      showToast('Signed in successfully!', 'success');
     } catch (err: any) {
-      showToast(err.message || 'Failed to sign in as demo member', 'error');
+      showToast(err.message || 'Authentication failed. Please verify credentials.', 'error');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Phone form
-  const [phone, setPhone] = useState('');
-  const [phoneOtp, setPhoneOtp] = useState('');
-  const [phoneCodeHint, setPhoneCodeHint] = useState<string | null>(null);
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      showToast('Please enter your full name', 'error');
+      return;
+    }
+    if (!isEmailValid) {
+      showToast('Please enter a valid email address', 'error');
+      return;
+    }
+    if (!isPasswordLengthValid) {
+      showToast('Password must be at least 6 characters long', 'error');
+      return;
+    }
+    if (!doPasswordsMatch) {
+      showToast('Passwords do not match', 'error');
+      return;
+    }
 
-  // Email form
-  const [email, setEmail] = useState('');
-  const [emailCode, setEmailCode] = useState('');
-  const [emailCodeHint, setEmailCodeHint] = useState<string | null>(null);
-  const [emailMode, setEmailMode] = useState<'password' | 'otp'>('password');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-
-  const quickProfiles = import.meta.env.DEV ? [
-    {
-      name: 'Owner Account',
-      role: 'owner' as AppRole,
-      email: 'owner@testgym.com',
-      badge: 'Owner (Full Access)',
-      icon: Crown,
-      color: 'text-[#0066cc]',
-      accentBg: 'bg-[#f5f9ff] border-[#0071e3]/30',
-    },
-    {
-      name: 'Manager Account',
-      role: 'manager' as AppRole,
-      email: 'manager@testgym.com',
-      badge: 'Manager (Operations)',
-      icon: Briefcase,
-      color: 'text-[#ff9500]',
-      accentBg: 'bg-[#fffaf0] border-[#ff9500]/30',
-    },
-    {
-      name: 'Trainer Account',
-      role: 'trainer' as AppRole,
-      email: 'trainer@testgym.com',
-      badge: 'Trainer (Coach)',
-      icon: UserCheck2,
-      color: 'text-[#34c759]',
-      accentBg: 'bg-[#f4fcf6] border-[#34c759]/30',
-    },
-  ] : [];
-
-  const handleQuickRelogin = async (roleOverride?: AppRole, customProfile?: any) => {
     try {
       setIsSubmitting(true);
-      if (customProfile) {
-        await reloginFast(customProfile);
-        showToast(`Welcome back, ${customProfile.name}!`);
-      } else if (roleOverride) {
-        await reloginFast(roleOverride);
-        showToast(`Signed in as ${roleOverride.toUpperCase()}`);
-      } else if (rememberedAccount) {
-        await reloginFast(rememberedAccount);
-        showToast(`Welcome back, ${rememberedAccount.name || 'Operator'}!`);
-      } else {
-        showToast('No saved account found. Please sign in with email.', 'error');
-      }
-    } catch {
-      showToast('Failed to resume session', 'error');
+      await signUpWithEmailPassword(email, password, name);
+      showToast('Account created! A verification link has been sent to your email.', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Registration failed', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isEmailValid) {
+      showToast('Please enter a valid email address to receive password reset link', 'error');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await sendPasswordReset(email);
+      showToast('Password reset email dispatched! Please check your inbox and spam folder.', 'success');
+      setActiveTab('signin');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to dispatch password reset link', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -128,545 +142,401 @@ export const ReloginView: React.FC = () => {
     try {
       setIsSubmitting(true);
       await signInWithGoogle();
-      showToast('Authenticated via Google Identity');
+      showToast('Authenticated via Google Identity', 'success');
     } catch (err: any) {
-      showToast(err.message || 'Google sign-in failed', 'error');
+      if (!err.message?.includes('cancelled')) {
+        showToast(err.message || 'Google sign-in failed', 'error');
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handlePhoneSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleResendVerification = async () => {
+    if (resendCooldown > 0) return;
     try {
       setIsSubmitting(true);
-      if (!pendingSetup) {
-        try {
-          await signInWithPhoneFast(phone);
-          showToast(`Welcome back! Phone ${phone} verified.`);
-        } catch {
-          const code = await startPhoneSetup({
-            phoneNumber: phone,
-            name: 'Gym Operator',
-            gymName: gym?.name || 'My Fitness Gym',
-            role: 'owner',
-          });
-          setPhoneCodeHint(code);
-          showToast(`SMS OTP sent: ${code}`);
-        }
-      } else {
-        await verifyPhoneSetup(phoneOtp);
-        showToast('Mobile verified successfully!');
-      }
+      await sendVerificationEmail();
+      setResendCooldown(60);
+      showToast('Verification email resent! Please check your inbox.', 'success');
     } catch (err: any) {
-      showToast(err.message || 'Authentication failed', 'error');
+      showToast(err.message || 'Failed to resend verification email', 'error');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim()) {
-      showToast('Please enter your email address', 'error');
-      return;
-    }
-
+  const handleRefreshVerification = async () => {
     try {
       setIsSubmitting(true);
-      if (emailMode === 'password') {
-        if (!password.trim()) {
-          showToast('Please enter your password', 'error');
-          return;
-        }
-        await signInWithEmailPassword(email, password);
-        showToast(`Welcome back, ${email}!`);
+      await reloadUser();
+      if (isEmailVerified) {
+        showToast('Email verified successfully! Welcome aboard.', 'success');
       } else {
-        if (!pendingSetup) {
-          try {
-            await signInWithEmailFast(email);
-            showToast(`Welcome back, ${email}!`);
-          } catch {
-            const code = await startEmailSetup({
-              email,
-              name: 'Gym Operator',
-              gymName: gym?.name || 'My Fitness Gym',
-              role: 'owner',
-            });
-            setEmailCodeHint(code);
-            showToast(`Verification code generated: ${code}`);
-          }
-        } else {
-          await verifyEmailSetup(emailCode);
-          showToast('Email verified successfully!');
-        }
+        showToast('Email not yet verified. Please click the link in your email first.', 'warning');
       }
     } catch (err: any) {
-      showToast(err.message || 'Authentication failed', 'error');
+      showToast(err.message || 'Failed to refresh verification status', 'error');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const inputClass = "w-full px-3.5 py-2.5 bg-[#f5f5f7] border border-[#e0e0e0] rounded-[10px] text-[13px] text-[#1d1d1f] placeholder-[#86868b] focus:outline-none focus:border-[#0071e3] transition-all";
-  const labelClass = "text-[12px] font-medium text-[#1d1d1f] mb-1 block";
+  const inputClass = "w-full px-4 py-3 bg-[#f2f2f7] hover:bg-[#ebebed] focus:bg-white border border-transparent focus:border-[#0071e3] rounded-[14px] text-[14px] text-[#1d1d1f] placeholder-[#8e8e93] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20 transition-all";
+  const labelClass = "text-[13px] font-semibold text-[#1d1d1f] mb-1.5 block tracking-tight";
 
-  return (
-    <div className="min-h-screen bg-[#fafafc] text-[#1d1d1f] flex flex-col justify-center items-center p-4 sm:p-6">
-      <div className="w-full max-w-lg space-y-6">
-        {/* Brand Header */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-white border border-[#e0e0e0] rounded-full text-[#0066cc] text-[12px] font-medium shadow-sm">
-            <Dumbbell size={14} />
-            <span>{gym?.name || 'Gym Manager SaaS'}</span>
+  // If logged in via email/password but not yet verified, show verification requirement screen
+  if (isLoggedIn && !isEmailVerified) {
+    return (
+      <div className="min-h-screen bg-[#f5f5f7] flex items-center justify-center p-4 selection:bg-[#0071e3]/20">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="w-full max-w-md bg-white border border-[#e5e5ea] rounded-[28px] p-8 shadow-xl text-center space-y-6"
+        >
+          <div className="w-16 h-16 mx-auto rounded-full bg-[#0071e3]/10 text-[#0071e3] flex items-center justify-center">
+            <Mail size={32} />
           </div>
 
-          <h1 className="text-[28px] sm:text-[32px] font-semibold text-[#1d1d1f] tracking-tight">
-            Sign In to Continue
-          </h1>
-          <p className="text-[13px] text-[#86868b] max-w-sm mx-auto">
-            Commercial Gym Management System
-          </p>
-        </div>
-
-        {/* Auth Card */}
-        <div className="bg-white border border-[#e0e0e0] rounded-[22px] shadow-sm p-6 sm:p-7 space-y-6">
-          {/* DEDICATED DEMO MEMBER SIGN-IN */}
-          <div className="p-4 rounded-[18px] bg-gradient-to-br from-[#1d1d1f] via-[#242426] to-[#2c2c2e] text-white shadow-xs border border-black/10 relative overflow-hidden">
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#0071e3] text-white tracking-wide uppercase shadow-xs">
-                <Sparkles size={11} />
-                DEMO MEMBER
-              </span>
-              <span className="text-[11px] text-white/60 font-medium">Isolated Sandbox</span>
-            </div>
-            
-            <h3 className="text-[15px] font-semibold text-white tracking-tight">
-              Instant Member Experience
-            </h3>
-            <p className="text-[12px] text-white/70 mt-0.5 leading-relaxed">
-              Sign in as <strong>Alex Johnson (RPM-DEMO-001)</strong> with live attendance streaks, assigned workouts, community feed, and digital pass.
+          <div>
+            <h2 className="text-[24px] font-bold text-[#1d1d1f] tracking-tight">Verify Your Email</h2>
+            <p className="text-[13px] text-[#8e8e93] mt-2 leading-relaxed">
+              We sent a verification link to <br />
+              <strong className="text-[#1d1d1f] font-semibold">{firebaseUser?.email}</strong>
             </p>
+          </div>
+
+          <div className="p-4 bg-[#f2f2f7] rounded-[18px] text-[13px] text-[#6e6e73] text-left space-y-1.5">
+            <div className="flex items-center gap-2 font-medium text-[#1d1d1f]">
+              <AlertCircle size={15} className="text-[#ff9500]" />
+              <span>Action Required</span>
+            </div>
+            <p>1. Open the email in your inbox or spam folder.</p>
+            <p>2. Click the verification link.</p>
+            <p>3. Return here and click <strong>Check Verification Status</strong>.</p>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={handleRefreshVerification}
+              isLoading={isSubmitting}
+              className="w-full justify-center text-[14px]"
+            >
+              <RefreshCw size={16} className="mr-2" />
+              Check Verification Status
+            </Button>
 
             <button
               type="button"
-              disabled={isSubmitting}
-              onClick={handleDemoMemberLogin}
-              className="mt-3.5 w-full py-2.5 px-4 bg-white hover:bg-[#f5f5f7] active:scale-[0.99] text-[#1d1d1f] font-semibold text-[13px] rounded-[12px] flex items-center justify-between transition-all cursor-pointer shadow-sm disabled:opacity-50"
+              onClick={handleResendVerification}
+              disabled={resendCooldown > 0 || isSubmitting}
+              className="text-[13px] font-semibold text-[#0071e3] hover:underline disabled:opacity-50 cursor-pointer py-1"
             >
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-full bg-[#0071e3]/10 flex items-center justify-center text-[#0071e3]">
-                  <UserCheck2 size={13} />
-                </div>
-                <span>Continue as Demo Member</span>
-              </div>
-              <ArrowRight size={14} className="text-[#86868b]" />
+              {resendCooldown > 0 
+                ? `Resend Verification Email (${resendCooldown}s)` 
+                : 'Resend Verification Email'}
+            </button>
+
+            <button
+              type="button"
+              onClick={logout}
+              className="text-[13px] font-medium text-[#8e8e93] hover:text-[#ff3b30] transition-colors cursor-pointer pt-2"
+            >
+              Sign Out & Use Another Account
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#f5f5f7] flex flex-col justify-center items-center p-4 sm:p-6 font-sans antialiased selection:bg-[#0071e3]/20">
+      <div className="w-full max-w-md space-y-6">
+        {/* Brand Header */}
+        <div className="text-center space-y-2">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-[18px] bg-[#1d1d1f] text-white shadow-md mb-1">
+            <Dumbbell size={26} />
+          </div>
+          <h1 className="text-[28px] font-bold text-[#1d1d1f] tracking-tight">
+            Gym Manager
+          </h1>
+          <p className="text-[14px] text-[#8e8e93]">
+            Commercial Fitness Management Cloud
+          </p>
+        </div>
+
+        {/* Main Card */}
+        <div className="bg-white border border-[#e5e5ea] rounded-[28px] p-6 sm:p-8 shadow-xl space-y-6">
+          {/* Tab Selector */}
+          <div className="flex p-1 bg-[#f2f2f7] rounded-full border border-[#e5e5ea]">
+            <button
+              type="button"
+              onClick={() => { setActiveTab('signin'); }}
+              className={`flex-1 py-2 px-3 rounded-full text-[13px] font-semibold transition-all cursor-pointer ${
+                activeTab === 'signin' ? 'bg-white text-[#1d1d1f] shadow-xs' : 'text-[#8e8e93] hover:text-[#1d1d1f]'
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => { setActiveTab('signup'); }}
+              className={`flex-1 py-2 px-3 rounded-full text-[13px] font-semibold transition-all cursor-pointer ${
+                activeTab === 'signup' ? 'bg-white text-[#1d1d1f] shadow-xs' : 'text-[#8e8e93] hover:text-[#1d1d1f]'
+              }`}
+            >
+              Create Account
             </button>
           </div>
 
-          <div className="relative flex py-1 items-center">
-            <div className="flex-grow border-t border-[#e5e5ea]"></div>
-            <span className="flex-shrink mx-3 text-[11px] font-medium text-[#86868b] uppercase tracking-wider">
-              Or Staff Sign In
-            </span>
-            <div className="flex-grow border-t border-[#e5e5ea]"></div>
-          </div>
-
-          {/* Apple Segmented Method Tabs */}
-          <div className="flex p-1 bg-[#f5f5f7] rounded-full border border-[#e0e0e0]">
-            {[
-              ...(rememberedAccount ? [{ id: 'fast' as ReloginTab, label: 'Quick Access', icon: Zap }] : []),
-              { id: 'email' as ReloginTab, label: 'Email', icon: Mail },
-              { id: 'phone' as ReloginTab, label: 'Mobile', icon: Smartphone },
-              { id: 'google' as ReloginTab, label: 'Google', icon: Sparkles },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => { setActiveTab(tab.id); clearPendingSetup(); }}
-                  className={`flex-1 py-1.5 px-2 rounded-full text-[12px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                    isActive
-                      ? 'bg-white text-[#1d1d1f] shadow-sm'
-                      : 'text-[#86868b] hover:text-[#1d1d1f]'
-                  }`}
-                >
-                  <Icon size={13} />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-
           <AnimatePresence mode="wait">
-            {/* TAB 1: ONE-TAP FAST RELOGIN */}
-            {activeTab === 'fast' && rememberedAccount && (
-              <motion.div
-                key="tab-fast"
-                initial={{ opacity: 0, y: 4 }}
+            {/* TAB 1: SIGN IN */}
+            {activeTab === 'signin' && (
+              <motion.form
+                key="signin-tab"
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
+                exit={{ opacity: 0, y: -6 }}
+                onSubmit={handleSignIn}
                 className="space-y-4"
               >
-                {/* Remembered Account Card */}
-                <div className="p-4 bg-[#fafafc] border border-[#e0e0e0] rounded-[16px] space-y-3">
-                  <div className="flex items-center justify-between text-[11px] font-medium">
-                    <span className="text-[#0066cc] flex items-center gap-1.5">
-                      <Zap size={13} />
-                      Last Active Operator
-                    </span>
-                    <span className="text-[#34c759]">Saved Profile</span>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-[#f5f9ff] border border-[#0071e3]/30 flex items-center justify-center font-semibold text-[16px] text-[#0071e3] shrink-0">
-                      {(rememberedAccount.name || 'U').charAt(0).toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-[14px] font-semibold text-[#1d1d1f] truncate">
-                        {rememberedAccount.name || 'Operator'}
-                      </div>
-                      <div className="text-[12px] text-[#86868b] truncate">
-                        {rememberedAccount.email}
-                      </div>
-                      <div className="text-[11px] text-[#86868b] mt-0.5 capitalize">
-                        Role: <span className="font-semibold text-[#1d1d1f]">{rememberedAccount.role}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="lg"
-                    disabled={isSubmitting}
-                    onClick={() => handleQuickRelogin()}
-                    className="w-full justify-center gap-2 mt-1 text-[13px]"
-                  >
-                    <span>Continue as {rememberedAccount.name || 'Operator'}</span>
-                    <ArrowRight size={14} />
-                  </Button>
-                </div>
-
-                {/* Quick Role Switcher */}
-                <div className="space-y-2 pt-2 border-t border-[#f0f0f0]">
-                  <div className="text-[11px] font-medium text-[#86868b]">
-                    Or switch operator role:
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-2">
-                    {quickProfiles.map((p) => {
-                      const Icon = p.icon;
-                      return (
-                        <button
-                          key={p.role}
-                          type="button"
-                          disabled={isSubmitting}
-                          onClick={() => handleQuickRelogin(p.role, {
-                            id: `user-${p.role}`,
-                            name: p.name,
-                            email: p.email,
-                            role: p.role,
-                            gymId: gym?.id || 'gym-01',
-                            createdAt: '2026-01-01',
-                          })}
-                          className={`p-3 rounded-[12px] border text-left flex items-center justify-between transition-all cursor-pointer ${p.accentBg} hover:opacity-90`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <Icon size={16} className={p.color} />
-                            <div>
-                              <div className="font-semibold text-[13px] text-[#1d1d1f]">
-                                {p.name}
-                              </div>
-                              <div className="text-[11px] text-[#86868b]">
-                                {p.badge} • {p.email}
-                              </div>
-                            </div>
-                          </div>
-                          <ArrowRight size={14} className="text-[#86868b]" />
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {/* TAB 2: EMAIL LOGIN (PASSWORD & OTP) */}
-            {activeTab === 'email' && (
-              <motion.div
-                key="tab-email"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                className="space-y-4"
-              >
-                {/* Segmented Sub-control: Password vs OTP */}
-                <div className="flex p-1 bg-[#f5f5f7] rounded-full border border-[#e0e0e0]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmailMode('password');
-                      clearPendingSetup();
-                    }}
-                    className={`flex-1 py-1 px-2 rounded-full text-[12px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                      emailMode === 'password'
-                        ? 'bg-white text-[#1d1d1f] shadow-sm'
-                        : 'text-[#86868b] hover:text-[#1d1d1f]'
-                    }`}
-                  >
-                    <Lock size={12} />
-                    <span>Password Login</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmailMode('otp');
-                      clearPendingSetup();
-                    }}
-                    className={`flex-1 py-1 px-2 rounded-full text-[12px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                      emailMode === 'otp'
-                        ? 'bg-white text-[#1d1d1f] shadow-sm'
-                        : 'text-[#86868b] hover:text-[#1d1d1f]'
-                    }`}
-                  >
-                    <KeyRound size={12} />
-                    <span>Verify with OTP</span>
-                  </button>
-                </div>
-
-                <form onSubmit={handleEmailSubmit} className="space-y-4">
-                  <div>
-                    <label className={labelClass}>
-                      Registered Email Address
-                    </label>
+                <div>
+                  <label className={labelClass}>Email Address</label>
+                  <div className="relative">
                     <input
                       type="email"
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="rajesh@ironcoregym.com"
+                      placeholder="name@gym.com"
+                      autoComplete="username"
                       className={inputClass}
                     />
                   </div>
-
-                  {/* Password Login Mode */}
-                  {emailMode === 'password' && (
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <label className={labelClass}>
-                          Password
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="text-[11px] text-[#0071e3] hover:underline inline-flex items-center gap-1 cursor-pointer"
-                        >
-                          {showPassword ? <EyeOff size={11} /> : <Eye size={11} />}
-                          <span>{showPassword ? 'Hide' : 'Show'}</span>
-                        </button>
-                      </div>
-
-                      <div className="relative">
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          required
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          placeholder="Enter account password"
-                          className={`${inputClass} pr-9`}
-                        />
-                        <Lock size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#86868b]" />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* OTP Mode */}
-                  {emailMode === 'otp' && pendingSetup && (
-                    <div className="space-y-1">
-                      <div className="flex justify-between items-center">
-                        <label className={labelClass}>
-                          Enter 6-digit OTP
-                        </label>
-                        {emailCodeHint && (
-                          <span className="text-[11px] text-[#0066cc]">
-                            Code: {emailCodeHint}
-                          </span>
-                        )}
-                      </div>
-                      <input
-                        type="text"
-                        maxLength={6}
-                        required
-                        value={emailCode}
-                        onChange={(e) => setEmailCode(e.target.value)}
-                        placeholder="123456"
-                        className={`${inputClass} text-center text-[18px] tracking-widest font-semibold`}
-                      />
-                    </div>
-                  )}
-
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    size="lg"
-                    disabled={isSubmitting}
-                    className="w-full justify-center gap-2 text-[13px]"
-                  >
-                    <span>
-                      {emailMode === 'password'
-                        ? 'Sign In with Password'
-                        : pendingSetup
-                        ? 'Confirm Code & Sign In'
-                        : 'Send Verification Code'}
-                    </span>
-                    <ArrowRight size={14} />
-                  </Button>
-                </form>
-              </motion.div>
-            )}
-
-            {/* TAB 3: MOBILE PHONE OTP */}
-            {activeTab === 'phone' && (
-              <motion.div
-                key="tab-phone"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-              >
-                <form onSubmit={handlePhoneSubmit} className="space-y-4">
-                  <div>
-                    <label className={labelClass}>
-                      Mobile Number
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+91 98765 43210"
-                      className={inputClass}
-                    />
-                  </div>
-
-                  {pendingSetup && (
-                    <div className="space-y-1">
-                      <div className="flex justify-between items-center">
-                        <label className={labelClass}>
-                          Enter 6-Digit OTP
-                        </label>
-                        {phoneCodeHint && (
-                          <span className="text-[11px] text-[#0066cc]">
-                            Code: {phoneCodeHint}
-                          </span>
-                        )}
-                      </div>
-                      <input
-                        type="text"
-                        maxLength={6}
-                        required
-                        value={phoneOtp}
-                        onChange={(e) => setPhoneOtp(e.target.value)}
-                        placeholder="123456"
-                        className={`${inputClass} text-center text-[18px] tracking-widest font-semibold`}
-                      />
-                    </div>
-                  )}
-
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    size="lg"
-                    disabled={isSubmitting}
-                    className="w-full justify-center gap-2 text-[13px]"
-                  >
-                    <span>{pendingSetup ? 'Verify OTP & Sign In' : 'Sign In with Mobile'}</span>
-                    <ArrowRight size={14} />
-                  </Button>
-                </form>
-              </motion.div>
-            )}
-
-            {/* TAB 4: GOOGLE IDENTITY */}
-            {activeTab === 'google' && (
-              <motion.div
-                key="tab-google"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                className="space-y-4 text-center py-2"
-              >
-                <div className="w-12 h-12 mx-auto rounded-full bg-[#f5f9ff] border border-[#0071e3]/30 flex items-center justify-center text-[#0071e3]">
-                  <Sparkles size={20} />
                 </div>
 
                 <div>
-                  <h3 className="text-[15px] font-semibold text-[#1d1d1f]">Google Cloud Identity</h3>
-                  <p className="text-[#86868b] text-[13px] max-w-sm mx-auto mt-1">
-                    Sign in with your verified Google account.
-                  </p>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[13px] font-semibold text-[#1d1d1f] tracking-tight">Password</label>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('forgot')}
+                      className="text-[12px] font-semibold text-[#0071e3] hover:underline cursor-pointer"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Enter your password"
+                      autoComplete="current-password"
+                      className={`${inputClass} pr-11`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#8e8e93] hover:text-[#1d1d1f] transition-colors cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </div>
 
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="lg"
+                  isLoading={isSubmitting}
+                  className="w-full justify-center text-[14px] mt-2 font-semibold shadow-xs"
+                >
+                  Sign In to Workspace
+                </Button>
+
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-[#e5e5ea]" />
+                  </div>
+                  <div className="relative flex justify-center text-[12px] uppercase">
+                    <span className="bg-white px-3 text-[#8e8e93] font-medium">Or continue with</span>
+                  </div>
+                </div>
+
+                {/* Google Sign-In */}
                 <button
                   type="button"
                   onClick={handleGoogleLogin}
                   disabled={isSubmitting}
-                  className="w-full py-3 px-4 bg-white border border-[#e0e0e0] hover:bg-[#f5f5f7] rounded-full text-[#1d1d1f] font-medium text-[13px] flex items-center justify-center gap-3 transition-all cursor-pointer shadow-sm"
+                  className="w-full py-3 px-4 bg-white border border-[#e5e5ea] hover:bg-[#fafafc] rounded-[14px] text-[#1d1d1f] font-semibold text-[13px] flex items-center justify-center gap-3 transition-all cursor-pointer shadow-2xs"
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24">
-                    <path
-                      fill="#4285F4"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                    />
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                   </svg>
-                  <span>{isSubmitting ? 'Authenticating...' : 'Continue with Google'}</span>
+                  <span>Google Account</span>
                 </button>
-              </motion.div>
+              </motion.form>
+            )}
+
+            {/* TAB 2: SIGN UP */}
+            {activeTab === 'signup' && (
+              <motion.form
+                key="signup-tab"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                onSubmit={handleSignUp}
+                className="space-y-4"
+              >
+                <div>
+                  <label className={labelClass}>Full Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Ramesh Patel"
+                    autoComplete="name"
+                    className={inputClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@gym.com"
+                    autoComplete="username"
+                    className={inputClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Password</label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Minimum 6 characters"
+                      autoComplete="new-password"
+                      className={`${inputClass} pr-11`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#8e8e93] hover:text-[#1d1d1f] transition-colors cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Confirm Password</label>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Re-enter your password"
+                    autoComplete="new-password"
+                    className={`${inputClass} ${
+                      confirmPassword && !doPasswordsMatch ? 'border-[#ff3b30] focus:border-[#ff3b30]' : ''
+                    }`}
+                  />
+                  {confirmPassword && !doPasswordsMatch && (
+                    <span className="text-[12px] text-[#ff3b30] font-medium mt-1 block">
+                      Passwords do not match
+                    </span>
+                  )}
+                </div>
+
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="lg"
+                  isLoading={isSubmitting}
+                  disabled={!isPasswordLengthValid || !doPasswordsMatch || !isEmailValid}
+                  className="w-full justify-center text-[14px] mt-2 font-semibold shadow-xs"
+                >
+                  Create Firebase Account
+                </Button>
+              </motion.form>
+            )}
+
+            {/* TAB 3: FORGOT PASSWORD */}
+            {activeTab === 'forgot' && (
+              <motion.form
+                key="forgot-tab"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                onSubmit={handleForgotPassword}
+                className="space-y-4"
+              >
+                <div>
+                  <label className={labelClass}>Registered Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Enter your registered email"
+                    className={inputClass}
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="lg"
+                  isLoading={isSubmitting}
+                  className="w-full justify-center text-[14px]"
+                >
+                  Send Password Reset Link
+                </Button>
+
+                <div className="text-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('signin')}
+                    className="text-[13px] font-semibold text-[#8e8e93] hover:text-[#1d1d1f] transition-colors cursor-pointer"
+                  >
+                    Back to Sign In
+                  </button>
+                </div>
+              </motion.form>
             )}
           </AnimatePresence>
         </div>
 
-        {/* SELF-SERVICE GYM CREATION CALLOUT */}
-        <div className="p-5 bg-white border border-[#e0e0e0] rounded-[22px] text-center space-y-2.5 shadow-sm">
-          <div className="text-[13px] font-semibold text-[#0066cc] flex items-center justify-center gap-1.5">
-            <Building2 size={16} />
-            <span>New Gym Owner or Facility Operator?</span>
-          </div>
-          <p className="text-[13px] text-[#86868b] max-w-sm mx-auto">
-            Generate your own gym workspace, set custom pricing plans, and register your owner account with OTP verification.
+        {/* Register New Gym Workspace Link */}
+        <div className="text-center p-4 bg-white/60 backdrop-blur-md border border-[#e5e5ea] rounded-[22px]">
+          <p className="text-[13px] text-[#6e6e73]">
+            Setting up a new fitness center or branch?
           </p>
-          <Button
+          <button
             type="button"
-            variant="secondary"
-            size="md"
             onClick={() => setAuthScreen('register')}
-            className="w-full justify-center gap-2 text-[13px]"
+            className="mt-1.5 inline-flex items-center gap-1.5 text-[13px] font-bold text-[#0071e3] hover:underline cursor-pointer"
           >
-            <Sparkles size={14} className="text-[#0066cc]" />
-            <span>Create Account & Generate Gym</span>
-            <ArrowRight size={14} />
-          </Button>
-        </div>
-
-        {/* Security badge footer */}
-        <div className="text-center text-[12px] text-[#86868b] flex items-center justify-center gap-1.5">
-          <ShieldCheck size={14} className="text-[#34c759]" />
-          <span>Role-Based Access Control • Local & Cloud Synchronized</span>
+            <Building2 size={15} />
+            <span>Register New Gym Workspace</span>
+            <ArrowRight size={13} />
+          </button>
         </div>
       </div>
     </div>

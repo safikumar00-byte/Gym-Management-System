@@ -7,7 +7,6 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 
 import { app } from './src/app.ts';
-import { seedDatabaseIfEmpty } from './src/db/seed.ts';
 import { pool, checkDatabaseConnection } from './src/db/index.ts';
 
 async function startServer() {
@@ -21,13 +20,6 @@ async function startServer() {
   if (dbHealth.ok) {
     console.log(`[Gym Manager] Database connected successfully (${dbHealth.summary.host}:${dbHealth.summary.port}/${dbHealth.summary.database}) [${dbHealth.latencyMs}ms]`);
     dbReady = true;
-
-    // 2. Safe Idempotent Seed
-    try {
-      await seedDatabaseIfEmpty();
-    } catch (seedErr: any) {
-      console.warn('[Gym Manager] Initial seed deferred or encountered non-fatal error:', seedErr?.message || seedErr);
-    }
   } else {
     console.error('\n================================================================');
     console.error('❌ [Gym Manager] DATABASE PRE-FLIGHT CONNECTION FAILED');

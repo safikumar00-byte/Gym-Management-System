@@ -256,7 +256,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, onOpenAuth
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Rajesh Sharma"
+                  placeholder="Enter your full name"
                   className={inputClass}
                 />
               </div>

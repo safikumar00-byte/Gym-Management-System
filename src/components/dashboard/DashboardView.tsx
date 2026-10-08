@@ -135,46 +135,92 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>('WEEK');
 
   const chartData = useMemo(() => {
+    const allStoredPayments = getPayments();
+    
     if (chartPeriod === 'DAY') {
-      return [
-        { label: '6 AM', amount: 4500 },
-        { label: '9 AM', amount: 8200 },
-        { label: '12 PM', amount: 3500 },
-        { label: '3 PM', amount: 6200 },
-        { label: '6 PM', amount: 15400 },
-        { label: '9 PM', amount: 9800 },
+      const dayBuckets = [
+        { label: '6 AM', amount: 0 },
+        { label: '9 AM', amount: 0 },
+        { label: '12 PM', amount: 0 },
+        { label: '3 PM', amount: 0 },
+        { label: '6 PM', amount: 0 },
+        { label: '9 PM', amount: 0 },
       ];
+      // Aggregate today's payments into hour buckets
+      const todayStr = new Date().toISOString().split('T')[0];
+      allStoredPayments.forEach(p => {
+        const pDate = p.date || p.paymentDate || '';
+        if (pDate.startsWith(todayStr)) {
+          const hour = new Date(p.createdAt || pDate).getHours();
+          const amt = Number(p.amount) || 0;
+          if (hour < 8) dayBuckets[0].amount += amt;
+          else if (hour < 11) dayBuckets[1].amount += amt;
+          else if (hour < 14) dayBuckets[2].amount += amt;
+          else if (hour < 17) dayBuckets[3].amount += amt;
+          else if (hour < 20) dayBuckets[4].amount += amt;
+          else dayBuckets[5].amount += amt;
+        }
+      });
+      return dayBuckets;
     } else if (chartPeriod === 'WEEK') {
-      return [
-        { label: 'Mon', amount: 14500 },
-        { label: 'Tue', amount: 22500 },
-        { label: 'Wed', amount: 18000 },
-        { label: 'Thu', amount: 9500 },
-        { label: 'Fri', amount: 28000 },
-        { label: 'Sat', amount: 35000 },
-        { label: 'Sun', amount: 24500 },
-      ];
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const weekBuckets = days.map(d => ({ label: d, amount: 0 }));
+      
+      const now = new Date();
+      const currentDay = now.getDay();
+      const mondayOffset = (currentDay + 6) % 7;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - mondayOffset);
+      monday.setHours(0, 0, 0, 0);
+
+      allStoredPayments.forEach(p => {
+        const pDate = new Date(p.date || p.paymentDate || p.createdAt || '');
+        if (!isNaN(pDate.getTime()) && pDate >= monday) {
+          const dayIndex = (pDate.getDay() + 6) % 7;
+          if (dayIndex >= 0 && dayIndex < 7) {
+            weekBuckets[dayIndex].amount += Number(p.amount) || 0;
+          }
+        }
+      });
+      return weekBuckets;
     } else if (chartPeriod === 'YEAR') {
-      return [
-        { label: 'Jan', amount: 145000 },
-        { label: 'Feb', amount: 160000 },
-        { label: 'Mar', amount: 175000 },
-        { label: 'Apr', amount: 168000 },
-        { label: 'May', amount: 182000 },
-        { label: 'Jun', amount: 195000 },
-        { label: 'Jul', amount: 170000 },
-        { label: 'Aug', amount: 190000 },
-        { label: 'Sep', amount: metrics.thisMonthRevenue },
-      ];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const yearBuckets = months.map(m => ({ label: m, amount: 0 }));
+      const currentYear = new Date().getFullYear();
+
+      allStoredPayments.forEach(p => {
+        const pDate = new Date(p.date || p.paymentDate || p.createdAt || '');
+        if (!isNaN(pDate.getTime()) && pDate.getFullYear() === currentYear) {
+          const monthIndex = pDate.getMonth();
+          if (monthIndex >= 0 && monthIndex < 12) {
+            yearBuckets[monthIndex].amount += Number(p.amount) || 0;
+          }
+        }
+      });
+      return yearBuckets;
     } else {
-      return [
-        { label: 'Week 1', amount: 48000 },
-        { label: 'Week 2', amount: 52500 },
-        { label: 'Week 3', amount: 44000 },
-        { label: 'Week 4', amount: 40500 },
+      // Month (Week 1-4)
+      const monthBuckets = [
+        { label: 'Week 1', amount: 0 },
+        { label: 'Week 2', amount: 0 },
+        { label: 'Week 3', amount: 0 },
+        { label: 'Week 4', amount: 0 },
       ];
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+
+      allStoredPayments.forEach(p => {
+        const pDate = new Date(p.date || p.paymentDate || p.createdAt || '');
+        if (!isNaN(pDate.getTime()) && pDate.getMonth() === currentMonth && pDate.getFullYear() === currentYear) {
+          const dom = pDate.getDate();
+          const bucketIndex = Math.min(Math.floor((dom - 1) / 7), 3);
+          monthBuckets[bucketIndex].amount += Number(p.amount) || 0;
+        }
+      });
+      return monthBuckets;
     }
-  }, [chartPeriod, metrics.thisMonthRevenue]);
+  }, [chartPeriod]);
 
   const handleWhatsAppReminder = (phone: string, memberName: string, amount: number) => {
     const msg = generateWhatsAppReminderMessage(gym.name, memberName, amount);
