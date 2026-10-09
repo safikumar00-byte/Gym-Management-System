@@ -22,6 +22,13 @@ import { validatePassword } from '../lib/validation.ts';
 
 export type AppRole = 'owner' | 'manager' | 'trainer' | 'member';
 
+export type OnboardingState = 
+  | 'AUTHENTICATED_NEEDS_GYM'
+  | 'READY'
+  | 'EMAIL_VERIFICATION_REQUIRED'
+  | 'GYM_INACTIVE'
+  | 'GYM_SUSPENDED';
+
 interface AuthContextType {
   firebaseUser: FirebaseUser | null;
   userProfile: UserProfile | null;
@@ -32,6 +39,7 @@ interface AuthContextType {
   error: string | null;
   isLoggedIn: boolean;
   isEmailVerified: boolean;
+  onboardingState: OnboardingState | null;
 
   // View navigation between Sign In and Account Creation
   authScreen: 'login' | 'register';
@@ -76,18 +84,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [authScreen, setAuthScreen] = useState<'login' | 'register'>('login');
+  const [onboardingState, setOnboardingState] = useState<OnboardingState | null>(null);
 
   const fetchProfileAndGym = async () => {
     if (!auth.currentUser) {
       setUserProfile(null);
       setGym(null);
       setLinkedMember(null);
+      setOnboardingState(null);
       return;
     }
 
     try {
       setError(null);
       const data = await api.getMe();
+      if (data?.onboardingState) {
+        setOnboardingState(data.onboardingState);
+      }
+
       if (data?.user) {
         const normalizedRole = (data.user.role || 'owner').toLowerCase() as AppRole;
         const profile: UserProfile = {
@@ -99,6 +113,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           createdAt: new Date().toISOString(),
         };
         setUserProfile(profile);
+      } else {
+        setUserProfile(null);
       }
 
       if (data?.gym) {
@@ -116,6 +132,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           createdAt: data.gym.createdAt,
           updatedAt: data.gym.updatedAt,
         });
+      } else {
+        setGym(null);
       }
 
       if (data?.member) {
@@ -125,7 +143,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     } catch (err: any) {
       console.warn('[Auth] Error fetching profile from backend:', err?.message || err);
-      // Non-fatal if user is completing onboarding
     }
   };
 
@@ -138,6 +155,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setUserProfile(null);
         setGym(null);
         setLinkedMember(null);
+        setOnboardingState(null);
         clearStorageCache();
       }
       setLoading(false);
@@ -251,7 +269,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await sendPasswordResetEmail(auth, cleanEmail);
     } catch (err: any) {
       if (err.code === 'auth/user-not-found') {
-        // Safe UX: don't reveal account existence unnecessarily
         return;
       }
       if (err.code === 'auth/invalid-email') {
@@ -276,6 +293,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUserProfile(null);
       setGym(null);
       setLinkedMember(null);
+      setOnboardingState(null);
       clearStorageCache();
     } catch (err: any) {
       console.error('[Auth] Sign out error:', err);
@@ -344,6 +362,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         error,
         isLoggedIn,
         isEmailVerified,
+        onboardingState,
         authScreen,
         setAuthScreen,
         role,

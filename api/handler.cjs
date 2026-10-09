@@ -38982,15 +38982,15 @@ var require_bignumber = __commonJS({
           };
         })();
         function format(n, i2, rm, id) {
-          var c0, e2, ne3, len, str;
+          var c0, e2, ne2, len, str;
           if (rm == null) rm = ROUNDING_MODE;
           else intCheck(rm, 0, 8);
           if (!n.c) return n.toString();
           c0 = n.c[0];
-          ne3 = n.e;
+          ne2 = n.e;
           if (i2 == null) {
             str = coeffToString(n.c);
-            str = id == 1 || id == 2 && (ne3 <= TO_EXP_NEG || ne3 >= TO_EXP_POS) ? toExponential(str, ne3) : toFixedPoint(str, ne3, "0");
+            str = id == 1 || id == 2 && (ne2 <= TO_EXP_NEG || ne2 >= TO_EXP_POS) ? toExponential(str, ne2) : toFixedPoint(str, ne2, "0");
           } else {
             n = round(new BigNumber2(n), i2, rm);
             e2 = n.e;
@@ -39000,7 +39000,7 @@ var require_bignumber = __commonJS({
               for (; len < i2; str += "0", len++) ;
               str = toExponential(str, e2);
             } else {
-              i2 -= ne3 + (id === 2 && e2 > ne3);
+              i2 -= ne2 + (id === 2 && e2 > ne2);
               str = toFixedPoint(str, e2, "0");
               if (e2 + 1 > len) {
                 if (--i2 > 0) for (str += "."; i2--; str += "0") ;
@@ -75850,6 +75850,124 @@ if (!getApps().length) {
 }
 var adminAuth = getAuth();
 
+// src/middleware/auth.ts
+var authenticateFirebaseUser = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Missing or malformed authorization token" } });
+  }
+  const token = authHeader.split("Bearer ")[1];
+  try {
+    let decodedToken;
+    if (process.env.NODE_ENV !== "production" && token.startsWith("test-token-")) {
+      const isMember = token.includes("member");
+      const isManager = token.includes("manager");
+      const isTrainer = token.includes("trainer");
+      const role = isMember ? "MEMBER" : isManager ? "MANAGER" : isTrainer ? "TRAINER" : "OWNER";
+      const uid = `uid-${token}`;
+      let email = isMember ? "member@testgym.com" : `${role.toLowerCase()}@testgym.com`;
+      let name = isMember ? "Gym Member" : `Test ${role}`;
+      if (token.includes("rohit")) {
+        email = "rohit.sharma@testlifecycle.com";
+        name = "Rohit Sharma";
+      }
+      decodedToken = {
+        uid,
+        email,
+        name,
+        email_verified: true,
+        auth_time: Math.floor(Date.now() / 1e3),
+        iss: "https://securetoken.google.com/test",
+        sub: uid,
+        aud: "test",
+        iat: Math.floor(Date.now() / 1e3),
+        exp: Math.floor(Date.now() / 1e3) + 3600,
+        firebase: { identities: {}, sign_in_provider: "custom" }
+      };
+    } else {
+      decodedToken = await adminAuth.verifyIdToken(token);
+    }
+    req.decodedToken = decodedToken;
+    const profile = await db.query.userProfiles.findFirst({
+      where: eq(userProfiles.firebaseUid, decodedToken.uid),
+      with: {
+        gym: true
+      }
+    });
+    if (profile && profile.gym) {
+      const gymStatus = profile.gym.status || "ACTIVE";
+      const linkedMember = await db.query.members.findFirst({
+        where: and(eq(members.userId, profile.id), eq(members.gymId, profile.gymId)),
+        orderBy: (m2, { desc: desc10 }) => [desc10(m2.updatedAt)]
+      });
+      req.user = {
+        firebaseUid: decodedToken.uid,
+        userId: profile.id,
+        gymId: profile.gymId,
+        role: (profile.role || "OWNER").toUpperCase(),
+        name: profile.name,
+        email: profile.email,
+        gymStatus,
+        memberId: linkedMember?.id
+      };
+    } else {
+      req.user = void 0;
+    }
+    next();
+  } catch (error) {
+    console.error("Error verifying Firebase ID token or resolving profile:", error);
+    return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Invalid or expired authentication token" } });
+  }
+};
+var requireAuth = async (req, res, next) => {
+  authenticateFirebaseUser(req, res, () => {
+    if (!req.user) {
+      return res.status(403).json({
+        error: {
+          code: "NO_GYM_ASSOCIATION",
+          message: "User has no registered gym workspace. Please complete onboarding first."
+        }
+      });
+    }
+    const gymStatus = req.user.gymStatus || "ACTIVE";
+    if (gymStatus === "DEACTIVATED") {
+      return res.status(403).json({
+        error: {
+          code: "GYM_DEACTIVATED",
+          message: "This gym account has been deactivated. Please contact support or the gym owner."
+        }
+      });
+    }
+    if (gymStatus === "SUSPENDED" && req.method !== "GET") {
+      return res.status(403).json({
+        error: {
+          code: "GYM_SUSPENDED",
+          message: "This gym account is currently suspended. Modifications are restricted."
+        }
+      });
+    }
+    next();
+  });
+};
+var requireRole = (allowedRoles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Authentication required" } });
+    }
+    const userRole = (req.user.role || "").toUpperCase();
+    const normalizedAllowed = allowedRoles.map((r2) => r2.toUpperCase());
+    if (!normalizedAllowed.includes(userRole)) {
+      return res.status(403).json({
+        error: {
+          code: "FORBIDDEN",
+          message: `Access denied. Required role: ${allowedRoles.join(" or ")}. Your role: ${userRole}`
+        }
+      });
+    }
+    next();
+  };
+};
+
 // src/lib/audit.ts
 async function logAuditEvent({
   gymId,
@@ -75875,216 +75993,29 @@ async function logAuditEvent({
   }
 }
 
-// src/middleware/auth.ts
-var requireAuth = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Missing or malformed authorization token" } });
-  }
-  const token = authHeader.split("Bearer ")[1];
-  try {
-    let decodedToken;
-    if (process.env.NODE_ENV !== "production" && token.startsWith("test-token-")) {
-      const isMember = token.includes("member");
-      const isManager = token.includes("manager");
-      const isTrainer = token.includes("trainer");
-      const role = isMember ? "MEMBER" : isManager ? "MANAGER" : isTrainer ? "TRAINER" : "OWNER";
-      const uid = `uid-${token}`;
-      let email = isMember ? "member@testgym.com" : `${role.toLowerCase()}@testgym.com`;
-      let name = isMember ? "Gym Member" : `Test ${role}`;
-      if (token.includes("rohit")) {
-        email = "rohit.sharma@testlifecycle.com";
-        name = "Rohit Sharma";
-      }
-      decodedToken = {
-        uid,
-        email,
-        name,
-        auth_time: Math.floor(Date.now() / 1e3),
-        iss: "https://securetoken.google.com/test",
-        sub: uid,
-        aud: "test",
-        iat: Math.floor(Date.now() / 1e3),
-        exp: Math.floor(Date.now() / 1e3) + 3600,
-        firebase: { identities: {}, sign_in_provider: "custom" }
-      };
-    } else {
-      decodedToken = await adminAuth.verifyIdToken(token);
-    }
-    req.decodedToken = decodedToken;
-    let profile = await db.query.userProfiles.findFirst({
-      where: eq(userProfiles.firebaseUid, decodedToken.uid),
-      with: {
-        gym: true
-      }
-    });
-    if (!profile) {
-      try {
-        profile = await db.transaction(async (tx) => {
-          const existingInTx = await tx.query.userProfiles.findFirst({
-            where: eq(userProfiles.firebaseUid, decodedToken.uid),
-            with: { gym: true }
-          });
-          if (existingInTx) return existingInTx;
-          const isMember = decodedToken.uid.includes("member");
-          const isManager = decodedToken.uid.includes("manager");
-          const isTrainer = decodedToken.uid.includes("trainer");
-          const assignedRole = isMember ? "MEMBER" : isManager ? "MANAGER" : isTrainer ? "TRAINER" : "OWNER";
-          let targetGym = null;
-          if (decodedToken.uid.includes("gym-a")) {
-            const ownerAProfile = await tx.query.userProfiles.findFirst({
-              where: eq(userProfiles.firebaseUid, "uid-test-token-owner-gym-a")
-            });
-            if (ownerAProfile) {
-              targetGym = await tx.query.gyms.findFirst({
-                where: eq(gyms.id, ownerAProfile.gymId)
-              });
-            }
-          }
-          if (!targetGym && (isMember || isManager || isTrainer) && !decodedToken.uid.includes("tenant2")) {
-            targetGym = await tx.query.gyms.findFirst();
-          }
-          if (!targetGym) {
-            const gymName = decodedToken.uid.includes("tenant2") ? "Tenant B Fitness" : decodedToken.name ? `${decodedToken.name}'s Gym` : "My Fitness Gym";
-            const [newGym] = await tx.insert(gyms).values({
-              name: gymName,
-              phone: "",
-              email: decodedToken.email || "",
-              address: "",
-              upiId: "",
-              gstNumber: "",
-              currency: "INR",
-              timezone: "Asia/Kolkata",
-              receiptPrefix: decodedToken.uid.includes("tenant2") ? "TB-" : "GM-",
-              receiptFooter: "Thank you for training with us! Fees once paid are non-refundable.",
-              status: "ACTIVE"
-            }).returning();
-            targetGym = newGym;
-            await tx.insert(gymCounters).values({
-              gymId: targetGym.id,
-              memberSequence: 0,
-              receiptSequence: 0
-            }).onConflictDoNothing();
-            await tx.insert(membershipPlans).values([
-              {
-                gymId: targetGym.id,
-                name: "1 Month General Fitness",
-                durationMonths: 1,
-                durationDays: 30,
-                price: "2500.00",
-                description: "Access to general gym floor and cardio zone during operating hours.",
-                active: true
-              },
-              {
-                gymId: targetGym.id,
-                name: "3 Months Strength Pass",
-                durationMonths: 3,
-                durationDays: 90,
-                price: "6500.00",
-                description: "Quarterly membership including basic fitness assessment.",
-                active: true
-              }
-            ]);
-          }
-          const [newProfile] = await tx.insert(userProfiles).values({
-            firebaseUid: decodedToken.uid,
-            gymId: targetGym.id,
-            name: decodedToken.name || decodedToken.email?.split("@")[0] || (isMember ? "Gym Member" : "Gym User"),
-            email: decodedToken.email || null,
-            role: assignedRole
-          }).returning();
-          if (assignedRole === "MEMBER" && decodedToken.email) {
-            const matchedMember = await tx.query.members.findFirst({
-              where: and(eq(members.gymId, targetGym.id), eq(members.email, decodedToken.email))
-            });
-            if (matchedMember) {
-              await tx.update(members).set({ userId: newProfile.id, accountStatus: "ACTIVE", updatedAt: /* @__PURE__ */ new Date() }).where(eq(members.id, matchedMember.id));
-            }
-          }
-          await logAuditEvent({
-            gymId: targetGym.id,
-            userId: newProfile.id,
-            action: "USER_PROVISIONED",
-            entityType: "USER",
-            entityId: newProfile.id,
-            details: `Profile provisioned with role ${assignedRole} for UID: ${decodedToken.uid}`,
-            tx
-          });
-          return {
-            ...newProfile,
-            gym: targetGym
-          };
-        });
-      } catch (raceError) {
-        profile = await db.query.userProfiles.findFirst({
-          where: eq(userProfiles.firebaseUid, decodedToken.uid),
-          with: { gym: true }
-        });
-        if (!profile) {
-          throw raceError;
-        }
-      }
-    }
-    const gymStatus = profile.gym?.status || "ACTIVE";
-    if (gymStatus === "DEACTIVATED") {
-      return res.status(403).json({
-        error: {
-          code: "GYM_DEACTIVATED",
-          message: "This gym account has been deactivated. Please contact support or the gym owner."
-        }
-      });
-    }
-    if (gymStatus === "SUSPENDED" && req.method !== "GET") {
-      return res.status(403).json({
-        error: {
-          code: "GYM_SUSPENDED",
-          message: "This gym account is currently suspended. Modifications are restricted."
-        }
-      });
-    }
-    const linkedMember = await db.query.members.findFirst({
-      where: and(eq(members.userId, profile.id), eq(members.gymId, profile.gymId)),
-      orderBy: (m2, { desc: desc10 }) => [desc10(m2.updatedAt)]
-    });
-    req.user = {
-      firebaseUid: decodedToken.uid,
-      userId: profile.id,
-      gymId: profile.gymId,
-      role: (profile.role || "OWNER").toUpperCase(),
-      name: profile.name,
-      email: profile.email,
-      gymStatus,
-      memberId: linkedMember?.id
-    };
-    next();
-  } catch (error) {
-    console.error("Error verifying Firebase ID token or resolving profile:", error);
-    return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Invalid or expired authentication token" } });
-  }
-};
-var requireRole = (allowedRoles) => {
-  return (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Authentication required" } });
-    }
-    const userRole = (req.user.role || "").toUpperCase();
-    const normalizedAllowed = allowedRoles.map((r2) => r2.toUpperCase());
-    if (!normalizedAllowed.includes(userRole)) {
-      return res.status(403).json({
-        error: {
-          code: "FORBIDDEN",
-          message: `Access denied. Required role: ${allowedRoles.join(" or ")}. Your role: ${userRole}`
-        }
-      });
-    }
-    next();
-  };
-};
-
 // src/routes/auth.ts
 var router2 = (0, import_express2.Router)();
-router2.post("/register-gym", async (req, res) => {
+router2.post("/register-gym", authenticateFirebaseUser, async (req, res) => {
   try {
+    if (!req.decodedToken) {
+      return res.status(401).json({
+        error: { code: "UNAUTHORIZED", message: "Authentication required to register a gym workspace." }
+      });
+    }
+    const firebaseUid = req.decodedToken.uid;
+    const verifiedEmail = req.decodedToken.email;
+    const existingProfile = await db.query.userProfiles.findFirst({
+      where: eq(userProfiles.firebaseUid, firebaseUid),
+      with: { gym: true }
+    });
+    if (existingProfile && existingProfile.gym) {
+      return res.json({
+        gym: existingProfile.gym,
+        user: existingProfile,
+        onboardingState: "READY",
+        message: "Workspace already registered for this account."
+      });
+    }
     const {
       gymName,
       phone,
@@ -76098,20 +76029,29 @@ router2.post("/register-gym", async (req, res) => {
       ownerEmail,
       ownerPhone
     } = req.body;
-    if (!gymName || !ownerName || !ownerEmail) {
+    const normalizedOwnerName = String(ownerName || req.decodedToken.name || "").trim();
+    const normalizedOwnerEmail = String(verifiedEmail || ownerEmail || "").trim().toLowerCase();
+    if (!gymName || !normalizedOwnerName || !normalizedOwnerEmail) {
       return res.status(400).json({
         error: { code: "VALIDATION_ERROR", message: "Gym name, owner name, and owner email are required." }
       });
     }
     const result = await db.transaction(async (tx) => {
+      const inTxCheck = await tx.query.userProfiles.findFirst({
+        where: eq(userProfiles.firebaseUid, firebaseUid),
+        with: { gym: true }
+      });
+      if (inTxCheck && inTxCheck.gym) {
+        return { gym: inTxCheck.gym, user: inTxCheck, onboardingState: "READY" };
+      }
       const [newGym] = await tx.insert(gyms).values({
         name: String(gymName).trim(),
-        phone: phone ? String(phone).trim() : "",
-        email: email ? String(email).trim() : "",
+        phone: phone ? String(phone).trim() : ownerPhone ? String(ownerPhone).trim() : "",
+        email: email ? String(email).trim() : normalizedOwnerEmail,
         address: address ? String(address).trim() : "",
         upiId: upiId ? String(upiId).trim() : "",
         currency: String(currency).trim().toUpperCase() || "INR",
-        receiptPrefix: String(receiptPrefix).trim() || "GM-",
+        receiptPrefix: String(receiptPrefix).trim().toUpperCase() || "GM-",
         receiptFooter: receiptFooter || "Thank you for training with us! Fees once paid are non-refundable.",
         status: "ACTIVE"
       }).returning();
@@ -76121,10 +76061,11 @@ router2.post("/register-gym", async (req, res) => {
         receiptSequence: 0
       }).onConflictDoNothing();
       const [newProfile] = await tx.insert(userProfiles).values({
-        firebaseUid: `reg-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+        firebaseUid,
+        // Authoritative real Firebase UID from token
         gymId: newGym.id,
-        name: String(ownerName).trim(),
-        email: String(ownerEmail).trim().toLowerCase(),
+        name: normalizedOwnerName,
+        email: normalizedOwnerEmail,
         role: "OWNER"
       }).returning();
       await tx.insert(membershipPlans).values([
@@ -76133,7 +76074,7 @@ router2.post("/register-gym", async (req, res) => {
           name: "Monthly Core",
           durationMonths: 1,
           durationDays: 30,
-          price: "1500",
+          price: "1500.00",
           description: "Standard 1-month fitness & gym floor access",
           active: true
         },
@@ -76142,7 +76083,7 @@ router2.post("/register-gym", async (req, res) => {
           name: "Quarterly Power",
           durationMonths: 3,
           durationDays: 90,
-          price: "3800",
+          price: "3800.00",
           description: "3-month quarterly membership with locker & cardio access",
           active: true
         },
@@ -76151,12 +76092,21 @@ router2.post("/register-gym", async (req, res) => {
           name: "Annual Elite",
           durationMonths: 12,
           durationDays: 365,
-          price: "12000",
+          price: "12000.00",
           description: "Full 1-year unlimited access with diet consultation",
           active: true
         }
       ]).onConflictDoNothing();
-      return { gym: newGym, user: newProfile };
+      await logAuditEvent({
+        gymId: newGym.id,
+        userId: newProfile.id,
+        action: "USER_PROVISIONED",
+        entityType: "GYM",
+        entityId: newGym.id,
+        details: `Workspace '${newGym.name}' registered by owner '${newProfile.name}' (UID: ${firebaseUid})`,
+        tx
+      });
+      return { gym: newGym, user: newProfile, onboardingState: "READY" };
     });
     res.json(result);
   } catch (error) {
@@ -76164,33 +76114,60 @@ router2.post("/register-gym", async (req, res) => {
     res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to generate gym and owner account" } });
   }
 });
-router2.get("/me", requireAuth, async (req, res) => {
+router2.get("/me", authenticateFirebaseUser, async (req, res) => {
   try {
-    const gymId = req.user.gymId;
-    const gym = await db.query.gyms.findFirst({
-      where: eq(gyms.id, gymId)
-    });
-    let member = null;
-    if (req.user.memberId || req.user.role === "MEMBER") {
-      member = await db.query.members.findFirst({
-        where: and(
-          eq(members.gymId, gymId),
-          req.user.memberId ? eq(members.id, req.user.memberId) : eq(members.userId, req.user.userId)
-        ),
-        orderBy: (m2, { desc: desc10 }) => [desc10(m2.updatedAt)],
-        with: {
-          memberships: {
-            orderBy: (ms, { desc: desc10 }) => [desc10(ms.endDate)],
-            limit: 1
+    if (!req.decodedToken) {
+      return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Authentication required" } });
+    }
+    if (req.user) {
+      const gymId = req.user.gymId;
+      const gym = await db.query.gyms.findFirst({
+        where: eq(gyms.id, gymId)
+      });
+      let member = null;
+      if (req.user.memberId || req.user.role === "MEMBER") {
+        member = await db.query.members.findFirst({
+          where: and(
+            eq(members.gymId, gymId),
+            req.user.memberId ? eq(members.id, req.user.memberId) : eq(members.userId, req.user.userId)
+          ),
+          orderBy: (m2, { desc: desc10 }) => [desc10(m2.updatedAt)],
+          with: {
+            memberships: {
+              orderBy: (ms, { desc: desc10 }) => [desc10(ms.endDate)],
+              limit: 1
+            }
           }
-        }
+        });
+      }
+      const gymStatus = req.user.gymStatus || gym?.status || "ACTIVE";
+      let onboardingState2 = "READY";
+      if (gymStatus === "DEACTIVATED") {
+        onboardingState2 = "GYM_INACTIVE";
+      } else if (gymStatus === "SUSPENDED") {
+        onboardingState2 = "GYM_SUSPENDED";
+      }
+      return res.json({
+        user: req.user,
+        gym,
+        member,
+        applicationRole: req.user.role,
+        onboardingState: onboardingState2
       });
     }
-    res.json({
-      user: req.user,
-      gym,
-      member,
-      applicationRole: req.user.role
+    const isEmailVerified = req.decodedToken.email_verified || req.decodedToken.firebase?.sign_in_provider === "google.com";
+    const onboardingState = isEmailVerified ? "AUTHENTICATED_NEEDS_GYM" : "EMAIL_VERIFICATION_REQUIRED";
+    return res.json({
+      user: null,
+      gym: null,
+      member: null,
+      applicationRole: null,
+      onboardingState,
+      firebaseUser: {
+        uid: req.decodedToken.uid,
+        email: req.decodedToken.email || null,
+        name: req.decodedToken.name || null
+      }
     });
   } catch (error) {
     console.error("Error in /api/auth/me:", error);

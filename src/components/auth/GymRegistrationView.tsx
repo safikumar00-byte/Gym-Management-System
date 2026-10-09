@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Dumbbell, 
   Building2, 
@@ -14,7 +14,8 @@ import {
   CheckCircle2, 
   Receipt, 
   MapPin,
-  CreditCard
+  CreditCard,
+  LogOut
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Button } from '../ui/Button';
@@ -38,6 +39,7 @@ export const GymRegistrationView: React.FC = () => {
     setAuthScreen, 
     registerGymAccount,
     signUpWithEmailPassword,
+    logout,
     firebaseUser 
   } = useAuth();
   const { showToast } = useToast();
@@ -63,6 +65,17 @@ export const GymRegistrationView: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (firebaseUser) {
+      if (firebaseUser.displayName && !ownerName) {
+        setOwnerName(firebaseUser.displayName);
+      }
+      if (firebaseUser.email) {
+        setOwnerEmail(firebaseUser.email);
+      }
+    }
+  }, [firebaseUser]);
 
   const toggleTag = (tag: string) => {
     setSelectedTags((prev) =>
@@ -112,7 +125,7 @@ export const GymRegistrationView: React.FC = () => {
         await signUpWithEmailPassword(ownerEmail.trim(), password, ownerName.trim());
       }
 
-      // 2. Provision Gym and Owner Profile in Database
+      // 2. Provision Gym and Owner Profile in Database (bound to verified Firebase identity)
       await registerGymAccount({
         gymName: gymName.trim(),
         phone: gymPhone.trim() || ownerPhone.trim(),
@@ -145,17 +158,29 @@ export const GymRegistrationView: React.FC = () => {
       <div className="w-full max-w-2xl space-y-6">
         {/* Navigation Bar */}
         <div className="flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => setAuthScreen('login')}
-            className="inline-flex items-center gap-2 text-[13px] font-semibold text-[#8e8e93] hover:text-[#1d1d1f] transition-colors cursor-pointer"
-          >
-            <ArrowLeft size={16} />
-            <span>Back to Sign In</span>
-          </button>
+          {firebaseUser ? (
+            <button
+              type="button"
+              onClick={logout}
+              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#8e8e93] hover:text-[#ff3b30] transition-colors cursor-pointer"
+            >
+              <LogOut size={16} />
+              <span>Sign Out ({firebaseUser.email})</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAuthScreen('login')}
+              className="inline-flex items-center gap-2 text-[13px] font-semibold text-[#8e8e93] hover:text-[#1d1d1f] transition-colors cursor-pointer"
+            >
+              <ArrowLeft size={16} />
+              <span>Back to Sign In</span>
+            </button>
+          )}
+
           <div className="flex items-center gap-1 text-[12px] font-semibold text-[#0071e3] bg-[#0071e3]/10 px-3 py-1 rounded-full">
             <Building2 size={13} />
-            <span>New Gym Onboarding</span>
+            <span>Workspace Onboarding</span>
           </div>
         </div>
 
@@ -166,7 +191,7 @@ export const GymRegistrationView: React.FC = () => {
               Register Gym Workspace
             </h2>
             <p className="text-[13px] text-[#8e8e93] mt-1">
-              Set up your commercial fitness center, staff roles, and starter membership plans.
+              Set up your commercial fitness center, billing settings, and starter membership plans.
             </p>
           </div>
 
@@ -300,7 +325,7 @@ export const GymRegistrationView: React.FC = () => {
             <div className="space-y-4 pt-2 border-t border-[#f0f0f2]">
               <div className="flex items-center gap-2 text-[14px] font-bold text-[#1d1d1f]">
                 <User size={16} className="text-[#af52de]" />
-                <span>Gym Owner Account Credentials</span>
+                <span>Gym Owner Account Information</span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -311,7 +336,7 @@ export const GymRegistrationView: React.FC = () => {
                     required
                     value={ownerName}
                     onChange={(e) => setOwnerName(e.target.value)}
-                    placeholder="e.g. Full Name"
+                    placeholder="e.g. Rajesh Kumar"
                     className={inputClass}
                   />
                 </div>
@@ -336,8 +361,13 @@ export const GymRegistrationView: React.FC = () => {
                     onChange={(e) => setOwnerEmail(e.target.value)}
                     placeholder="e.g. rajesh@ironcoregym.com"
                     disabled={!!firebaseUser}
-                    className={inputClass}
+                    className={`${inputClass} ${firebaseUser ? 'opacity-70 cursor-not-allowed' : ''}`}
                   />
+                  {firebaseUser && (
+                    <span className="text-[11px] text-[#8e8e93] mt-1 block">
+                      Authenticated via Firebase ID. Workspace will be linked directly to this account.
+                    </span>
+                  )}
                 </div>
 
                 {!firebaseUser && (

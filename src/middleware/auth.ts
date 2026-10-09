@@ -2,9 +2,8 @@ import type { Request, Response, NextFunction } from 'express';
 import { adminAuth } from '../lib/firebase-admin.ts';
 import type { DecodedIdToken } from 'firebase-admin/auth';
 import { db } from '../db/index.ts';
-import { userProfiles, gyms, gymCounters, membershipPlans, members } from '../db/schema.ts';
-import { eq, and, ne } from 'drizzle-orm';
-import { logAuditEvent } from '../lib/audit.ts';
+import { userProfiles, members } from '../db/schema.ts';
+import { eq, and } from 'drizzle-orm';
 
 export type UserRole = 'OWNER' | 'MANAGER' | 'TRAINER' | 'MEMBER';
 
@@ -24,7 +23,14 @@ export interface AuthRequest extends Request {
   decodedToken?: DecodedIdToken;
 }
 
-export const requireAuth = async (
+/**
+ * Base authentication middleware:
+ * 1. Verifies the Firebase ID token.
+ * 2. Sets req.decodedToken with authoritative verified token claims.
+ * 3. Resolves user profile and gym from database if registered.
+ * 4. Leaves req.user undefined if the Firebase user has not completed gym onboarding.
+ */
+export const authenticateFirebaseUser = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
@@ -53,6 +59,7 @@ export const requireAuth = async (
         uid,
         email,
         name,
+        email_verified: true,
         auth_time: Math.floor(Date.now() / 1000),
         iss: 'https://securetoken.google.com/test',
         sub: uid,
@@ -66,189 +73,85 @@ export const requireAuth = async (
     }
     req.decodedToken = decodedToken;
 
-    // Look up user profile and gym in PostgreSQL
-    let profile: any = await db.query.userProfiles.findFirst({
+    // Look up user profile and gym in PostgreSQL by verified Firebase UID
+    const profile: any = await db.query.userProfiles.findFirst({
       where: eq(userProfiles.firebaseUid, decodedToken.uid),
       with: {
         gym: true,
       },
     });
 
-    // If user does not exist in DB yet, auto-provision their profile atomically
-    if (!profile) {
-      try {
-        profile = await db.transaction(async (tx) => {
-          // Double check inside transaction in case another request completed onboarding concurrently
-          const existingInTx = await tx.query.userProfiles.findFirst({
-            where: eq(userProfiles.firebaseUid, decodedToken.uid),
-            with: { gym: true },
-          });
-          if (existingInTx) return existingInTx;
+    if (profile && profile.gym) {
+      const gymStatus = profile.gym.status || 'ACTIVE';
 
-          const isMember = decodedToken.uid.includes('member');
-          const isManager = decodedToken.uid.includes('manager');
-          const isTrainer = decodedToken.uid.includes('trainer');
-          const assignedRole = isMember ? 'MEMBER' : isManager ? 'MANAGER' : isTrainer ? 'TRAINER' : 'OWNER';
-
-          // For members, managers, and trainers, attach to matching gym if specified or available
-          let targetGym: any = null;
-          if (decodedToken.uid.includes('gym-a')) {
-            const ownerAProfile = await tx.query.userProfiles.findFirst({
-              where: eq(userProfiles.firebaseUid, 'uid-test-token-owner-gym-a'),
-            });
-            if (ownerAProfile) {
-              targetGym = await tx.query.gyms.findFirst({
-                where: eq(gyms.id, ownerAProfile.gymId),
-              });
-            }
-          }
-
-          if (!targetGym && (isMember || isManager || isTrainer) && !decodedToken.uid.includes('tenant2')) {
-            targetGym = await tx.query.gyms.findFirst();
-          }
-
-          if (!targetGym) {
-            // Safe multi-tenant onboarding: Every new owner provisions a dedicated new gym
-            const gymName = decodedToken.uid.includes('tenant2')
-              ? 'Tenant B Fitness'
-              : (decodedToken.name ? `${decodedToken.name}'s Gym` : 'My Fitness Gym');
-            const [newGym] = await tx.insert(gyms).values({
-              name: gymName,
-              phone: '',
-              email: decodedToken.email || '',
-              address: '',
-              upiId: '',
-              gstNumber: '',
-              currency: 'INR',
-              timezone: 'Asia/Kolkata',
-              receiptPrefix: decodedToken.uid.includes('tenant2') ? 'TB-' : 'GM-',
-              receiptFooter: 'Thank you for training with us! Fees once paid are non-refundable.',
-              status: 'ACTIVE',
-            }).returning();
-
-            targetGym = newGym;
-
-            // Initialize atomic sequence counters for this new gym
-            await tx.insert(gymCounters).values({
-              gymId: targetGym.id,
-              memberSequence: 0,
-              receiptSequence: 0,
-            }).onConflictDoNothing();
-
-            // Seed default plans for the new gym
-            await tx.insert(membershipPlans).values([
-              {
-                gymId: targetGym.id,
-                name: '1 Month General Fitness',
-                durationMonths: 1,
-                durationDays: 30,
-                price: '2500.00',
-                description: 'Access to general gym floor and cardio zone during operating hours.',
-                active: true,
-              },
-              {
-                gymId: targetGym.id,
-                name: '3 Months Strength Pass',
-                durationMonths: 3,
-                durationDays: 90,
-                price: '6500.00',
-                description: 'Quarterly membership including basic fitness assessment.',
-                active: true,
-              },
-            ]);
-          }
-
-          // Create user profile pointing strictly to target gym
-          const [newProfile] = await tx.insert(userProfiles).values({
-            firebaseUid: decodedToken.uid,
-            gymId: targetGym.id,
-            name: decodedToken.name || decodedToken.email?.split('@')[0] || (isMember ? 'Gym Member' : 'Gym User'),
-            email: decodedToken.email || null,
-            role: assignedRole,
-          }).returning();
-
-          // If assignedRole is MEMBER, link only if matching email exists
-          if (assignedRole === 'MEMBER' && decodedToken.email) {
-            const matchedMember = await tx.query.members.findFirst({
-              where: and(eq(members.gymId, targetGym.id), eq(members.email, decodedToken.email)),
-            });
-            if (matchedMember) {
-              await tx.update(members)
-                .set({ userId: newProfile.id, accountStatus: 'ACTIVE', updatedAt: new Date() })
-                .where(eq(members.id, matchedMember.id));
-            }
-          }
-
-          await logAuditEvent({
-            gymId: targetGym.id,
-            userId: newProfile.id,
-            action: 'USER_PROVISIONED',
-            entityType: 'USER',
-            entityId: newProfile.id,
-            details: `Profile provisioned with role ${assignedRole} for UID: ${decodedToken.uid}`,
-            tx,
-          });
-
-          return {
-            ...newProfile,
-            gym: targetGym,
-          };
-        });
-      } catch (raceError) {
-        // Concurrency safety: If another concurrent request inserted profile, fetch it now
-        profile = await db.query.userProfiles.findFirst({
-          where: eq(userProfiles.firebaseUid, decodedToken.uid),
-          with: { gym: true },
-        });
-        if (!profile) {
-          throw raceError;
-        }
-      }
-    }
-
-    const gymStatus = profile.gym?.status || 'ACTIVE';
-
-    // Gym lifecycle check
-    if (gymStatus === 'DEACTIVATED') {
-      return res.status(403).json({ 
-        error: { 
-          code: 'GYM_DEACTIVATED', 
-          message: 'This gym account has been deactivated. Please contact support or the gym owner.' 
-        } 
+      // Resolve linked member record if any
+      const linkedMember = await db.query.members.findFirst({
+        where: and(eq(members.userId, profile.id), eq(members.gymId, profile.gymId)),
+        orderBy: (m, { desc }) => [desc(m.updatedAt)],
       });
+
+      req.user = {
+        firebaseUid: decodedToken.uid,
+        userId: profile.id,
+        gymId: profile.gymId,
+        role: (profile.role || 'OWNER').toUpperCase(),
+        name: profile.name,
+        email: profile.email,
+        gymStatus,
+        memberId: linkedMember?.id,
+      };
+    } else {
+      req.user = undefined;
     }
-
-    if (gymStatus === 'SUSPENDED' && req.method !== 'GET') {
-      return res.status(403).json({ 
-        error: { 
-          code: 'GYM_SUSPENDED', 
-          message: 'This gym account is currently suspended. Modifications are restricted.' 
-        } 
-      });
-    }
-
-    // Resolve linked member record if any
-    const linkedMember = await db.query.members.findFirst({
-      where: and(eq(members.userId, profile.id), eq(members.gymId, profile.gymId)),
-      orderBy: (m, { desc }) => [desc(m.updatedAt)],
-    });
-
-    req.user = {
-      firebaseUid: decodedToken.uid,
-      userId: profile.id,
-      gymId: profile.gymId,
-      role: (profile.role || 'OWNER').toUpperCase(),
-      name: profile.name,
-      email: profile.email,
-      gymStatus,
-      memberId: linkedMember?.id,
-    };
 
     next();
   } catch (error) {
     console.error('Error verifying Firebase ID token or resolving profile:', error);
     return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Invalid or expired authentication token' } });
   }
+};
+
+/**
+ * Strict workspace authorization middleware:
+ * Requires both a verified Firebase identity AND an associated gym workspace profile.
+ */
+export const requireAuth = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  authenticateFirebaseUser(req, res, () => {
+    if (!req.user) {
+      return res.status(403).json({
+        error: {
+          code: 'NO_GYM_ASSOCIATION',
+          message: 'User has no registered gym workspace. Please complete onboarding first.'
+        }
+      });
+    }
+
+    const gymStatus = req.user.gymStatus || 'ACTIVE';
+
+    if (gymStatus === 'DEACTIVATED') {
+      return res.status(403).json({
+        error: {
+          code: 'GYM_DEACTIVATED',
+          message: 'This gym account has been deactivated. Please contact support or the gym owner.'
+        }
+      });
+    }
+
+    if (gymStatus === 'SUSPENDED' && req.method !== 'GET') {
+      return res.status(403).json({
+        error: {
+          code: 'GYM_SUSPENDED',
+          message: 'This gym account is currently suspended. Modifications are restricted.'
+        }
+      });
+    }
+
+    next();
+  });
 };
 
 /**

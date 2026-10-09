@@ -31,7 +31,7 @@ import { Member, Payment, Gym } from './types';
 import { getGym, subscribeToStore } from './lib/storage';
 
 function AppContent() {
-  const { isLoggedIn, authScreen, isMember, loading } = useAuth();
+  const { isLoggedIn, authScreen, isMember, loading, isEmailVerified, onboardingState } = useAuth();
   const [currentView, setCurrentView] = useState<NavView>('dashboard');
   const [gym, setGym] = useState<Gym>(getGym());
   const [renderTrigger, setRenderTrigger] = useState(0);
@@ -95,6 +95,16 @@ function AppContent() {
       return <GymRegistrationView />;
     }
     return <ReloginView />;
+  }
+
+  // If email verification is required
+  if (!isEmailVerified || onboardingState === 'EMAIL_VERIFICATION_REQUIRED') {
+    return <ReloginView />;
+  }
+
+  // If authenticated user needs to register/onboard their gym workspace
+  if (onboardingState === 'AUTHENTICATED_NEEDS_GYM') {
+    return <GymRegistrationView />;
   }
 
   if (isMember) {
